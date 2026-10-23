@@ -1,12 +1,12 @@
 # Suplos
 
-Aplicación de licitaciones construida en PHP con los componentes de Laravel (`illuminate/database` y `illuminate/events`) y Eloquent como ORM.
+API de licitaciones construida en PHP puro, con los componentes de Laravel (`illuminate/database` y `illuminate/events`) y Eloquent como ORM. Sigue una arquitectura MVC sin frameworks ni micro-frameworks.
 
 ## Requisitos
 
-- PHP 8.5
+- PHP 8.3 o superior
 - Composer 2.x
-- MySQL con la extensión `pdo_mysql`
+- MySQL o MariaDB con la extensión `pdo_mysql`
 
 ## Instalación
 
@@ -29,12 +29,27 @@ La aplicación queda disponible en `http://localhost:8000`.
 
 ```
 app/
-  Config/        Configuración e inicialización de servicios
-  Controllers/   Controladores
-  Models/        Modelos Eloquent
-config/          Archivos de configuración
-public/          Punto de entrada (index.php)
+├── Config/
+│   └── Database.php          Inicialización de la conexión y Eloquent
+├── Controllers/
+├── Http/
+│   ├── Controller.php        Controlador base
+│   ├── Request.php           Solicitud HTTP
+│   ├── Response.php          Respuesta HTTP
+│   └── Router.php            Enrutador
+├── Models/
+├── Support/
+│   └── ErrorHandler.php      Manejo global de errores y excepciones
+└── Views/                    Representación JSON de los recursos
+config/
+└── Database.php              Configuración de la base de datos
+public/
+└── index.php                 Punto de entrada
 ```
+
+El flujo MVC es `Request → Router → Controller → Model → View → Response`.
+
+Las carpetas `Controllers`, `Models` y `Views` quedan preparadas para su implementación. Las clases de `app/Http` y `app/Support` son la base estructural (sin lógica todavía).
 
 ## Variables de entorno
 
