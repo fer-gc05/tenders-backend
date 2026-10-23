@@ -1,0 +1,25 @@
+{
+    "name": "suplos/tenders",
+    "description": "Aplicacion de licitaciones Suplos",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "illuminate/database": "^13.38",
+        "illuminate/events": "^13.38",
+        "vlucas/phpdotenv": "^5.7"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/"
+        }
+    },
+    "scripts": {
+        "serve": "php -S localhost:8000 -t public"
+    },
+    "authors": [
+        {
+            "name": "Fernando Luis Gil Correa",
+            "email": "gilcorrealuis09@gmail.com"
+        }
+    ]
+}
