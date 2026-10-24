@@ -14,7 +14,7 @@
         }
     },
     "scripts": {
-        "serve": "php -S localhost:8000 -t public"
+        "dev": "php -S localhost:8000 -t public public/router.php"
     },
     "authors": [
         {
