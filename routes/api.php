@@ -17,7 +17,7 @@ $router = new Router(Request::capture());
 
 $router->get('/api/v1/status', function (Request $request): Response {
     return Response::json([
-        'app' => $_ENV['APP_NAME'] ?? 'Tenders_Bankend',
+        'app' => $_ENV['APP_NAME'] ?? 'tenders_backend',
         'status' => 'ok',
     ]);
 });
