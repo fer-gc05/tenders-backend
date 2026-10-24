@@ -12,6 +12,7 @@
 
 use Dotenv\Dotenv;
 use App\Config\Database;
+use App\Support\ErrorHandler;
 
 # Carga de dependencias.
 require __DIR__ . '/../vendor/autoload.php';
@@ -20,12 +21,12 @@ require __DIR__ . '/../vendor/autoload.php';
 $dotenv = Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->load();
 
+# Registro del manejador global de errores.
+ErrorHandler::register();
+
 # Inicializa la conexión a la base de datos (Eloquent).
 Database::init();
 
-header('Content-Type: application/json; charset=utf-8');
-
-echo json_encode([
-    'app' => $_ENV['APP_NAME'] ?? 'Suplos',
-    'status' => 'ok',
-]);
+# Despacha la solicitud hacia la ruta correspondiente.
+$router = require __DIR__ . '/../routes/api.php';
+$router->dispatch();
