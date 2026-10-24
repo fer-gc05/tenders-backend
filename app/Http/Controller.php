@@ -12,4 +12,9 @@ namespace App\Http;
  */
 abstract class Controller
 {
+    # Crea una respuesta JSON para el cliente.
+    protected function response(mixed $data, int $status = 200): Response
+    {
+        return Response::json($data, $status);
+    }
 }
