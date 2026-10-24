@@ -1,6 +1,6 @@
 {
-    "name": "suplos/tenders",
-    "description": "Aplicacion de licitaciones Suplos",
+    "name": "fer-gc05/tenders-backend",
+    "description": "API de licitaciones tenders_backend",
     "type": "project",
     "license": "proprietary",
     "require": {
