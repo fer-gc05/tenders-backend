@@ -1,49 +1,57 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http;
 
 /**
  * Solicitud HTTP entrante.
  *
- * @author Fernando Luis Gil Correa
- * @version 1.0.0
- * @since 2026-10-22
- * @package App\Http
+ * @author    Fernando Luis Gil Correa
+ * @version   1.1.0
+ * @since     2026-10-22
+ * @updated   2026-10-24
+ * @package   App\Http
+ *
+ * @change    1.1.0 - 2026-10-24 - Fernando Luis Gil Correa - Tipos
+ *            estrictos y limpieza de los comentarios redundantes.
  */
 class Request
 {
     # Constructor de la clase Request.
     public function __construct(
-    private string $method, # Metodo HTTP de la solicitud.
+    private string $method, # Método HTTP de la solicitud.
     private string $path, # Ruta de la solicitud.
-    private array $query, # Parametros de la solicitud.
-    private array $body, # Cuerpo de la solicitud.b
+    private array $query, # Parámetros de la query string.
+    private array $body, # Cuerpo de la solicitud.
     private array $headers, # Headers de la solicitud.
-    private array $params = [], # Parametros de la solicitud.
+    private array $params = [], # Parámetros de ruta.
     )
     {}
 
     # Captura la solicitud HTTP entrante.
     public static function capture(): self
     {
-        $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET'); # Metodo HTTP de la solicitud.
-        $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/'; # Ruta de la solicitud.
-        $path = rtrim($path, '/') ?: '/'; # Ruta de la solicitud.
-        $headers = function_exists('getallheaders') ? getallheaders() ?: []: []; # Headers de la solicitud.
-        $body = []; # Cuerpo de la solicitud.
+        $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+        $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+        $path = rtrim($path, '/') ?: '/';
+        $headers = function_exists('getallheaders') ? getallheaders() ?: [] : [];
+        $body = [];
 
-        $raw = file_get_contents('php://input'); # Cuerpo de la solicitud.
+        # El cuerpo JSON se decodifica primero; si no es JSON válido, queda
+        # vacío y se intenta con el cuerpo de formulario (x-www-form-urlencoded).
+        $raw = file_get_contents('php://input');
 
-        if (is_string($raw) && $raw !== '') { # Si el cuerpo de la solicitud es una cadena y no es vacia.
-            $decoded = json_decode($raw, true); # Decodifica el cuerpo de la solicitud.
-            $body = is_array($decoded) ? $decoded : []; # Cuerpo de la solicitud.
+        if (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            $body = is_array($decoded) ? $decoded : [];
         }
 
-        if ($body === [] && !empty($_POST)) { # Si no hay JSON, usa el cuerpo de formulario.
+        if ($body === [] && !empty($_POST)) {
             $body = $_POST;
         }
 
-        return new self($method, $path, $_GET, $body, $headers); # Crea una nueva instancia de la clase Request.
+        return new self($method, $path, $_GET, $body, $headers);
     }
 
     # Retorna el metodo HTTP de la solicitud.

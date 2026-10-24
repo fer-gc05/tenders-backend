@@ -81,7 +81,7 @@ curl http://localhost:8000/api/v1/status
 | --- | --- | --- | --- |
 | `GET` | `/api/v1/status` | Estado del servicio. | `200` `{"app":"tenders_backend","status":"ok"}` |
 
-Las rutas inexistentes responden `404` y las peticiones con un método no permitido responden `405`, siempre en JSON.
+Las rutas inexistentes responden `404` y las peticiones con un método no permitido responden `405`, siempre en JSON. El `405` incluye el header `Allow` con los métodos registrados para la ruta (por ejemplo, `Allow: GET`), como exige el estándar HTTP.
 
 El CRUD de licitaciones está en desarrollo; por ahora el único endpoint publicado es el de estado.
 
@@ -160,7 +160,7 @@ La versión sigue el criterio habitual: *patch* para ajustes internos, *minor* c
 | Error de validación | `422` | `{"error":"Validation error.","errors":{...}}` |
 | Excepción no controlada | `500` | `{"error":"Internal server error."}` |
 
-Con `APP_ENV=local` la respuesta `500` incluye el mensaje original, el archivo y la traza, para facilitar el diagnóstico.
+Con `APP_ENV=local` la respuesta `500` incluye el mensaje original, el archivo y la traza, para facilitar el diagnóstico. Los avisos (`E_NOTICE`) y las deprecaciones (`E_DEPRECATED`) no interrumpen la petición: se escriben en el log del servicio (`journalctl -u php-fpm`); solo las advertencias y los errores reales se convierten en `500`.
 
 ## Validación
 
@@ -221,7 +221,7 @@ class TenderController extends Controller
 
 El controlador recibe la solicitud ya validada: si alguna regla falla, el Router interrumpe el flujo y responde `422` sin llegar a ejecutar el método.
 
-Las reglas se ajustan al esquema de `tenders`: `max` respeta la longitud de la columna, `in` acota los valores permitidos y `nullable` acepta que el campo no llegue, de modo que la base de datos aplique su valor por defecto (`draft` en el caso de `status`). `min` y `max` se aplican a la longitud de un texto, a la cantidad de elementos de un array o al valor numérico cuando el campo llega como número; por eso el presupuesto se valida solo con `numeric` y deja el rango y los decimales en manos del tipo `decimal(15,2)`.
+Las reglas se ajustan al esquema de `tenders`: `max` respeta la longitud de la columna, `in` acota los valores permitidos y `nullable` acepta que el campo no llegue, de modo que la base de datos aplique su valor por defecto (`draft` en el caso de `status`). `min` y `max` interpretan el valor según su tipo: un array se compara por la cantidad de elementos, un valor numérico (incluida una cadena como `"15000000.00"`) por su valor y cualquier otra cadena por su longitud; así, el presupuesto se acota con `numeric|min:0` y los textos con `max:<longitud de la columna>`. La regla `date` exige el formato ISO `YYYY-MM-DD` (rechaza `"next monday"` o el 31 de febrero) y `time` exige `HH:MM` o `HH:MM:SS` entre `00:00:00` y `23:59:59`.
 
 Respuesta de error:
 
@@ -234,14 +234,26 @@ Respuesta de error:
 }
 ```
 
-Reglas disponibles: `required`, `nullable`, `string`, `email`, `integer`, `numeric`, `boolean`, `array`, `min`, `max`, `date`, `in:val1,val2`.
+Reglas disponibles: `required`, `nullable`, `string`, `email`, `integer`, `numeric`, `boolean`, `array`, `min:<n>`, `max:<n>`, `date`, `time`, `in:val1,val2`.
+
+Las validaciones que las reglas no expresan (por ejemplo, que una clave foránea exista o que un código sea único) se agregan en el hook `after()` de cada `FormRequest`, que se ejecuta solo si las reglas pasan y devuelve un mapa `campo => mensajes` para responder `422`:
+
+```php
+protected function after(): array
+{
+    return \App\Models\Activity::find($this->body('activity_id'))
+        ? []
+        : ['activity_id' => ['The selected activity is invalid.']];
+}
+```
 
 ## Variables de entorno
 
 | Variable | Descripción | Valor por defecto |
 | --- | --- | --- |
 | `APP_NAME` | Nombre de la aplicación | `tenders_backend` |
-| `APP_ENV` | Entorno de ejecución | `local` |
+| `APP_ENV` | Entorno de ejecución. En `local`, los errores 500 incluyen mensaje, archivo y traza | `local` |
+| `APP_TIMEZONE` | Zona horaria de PHP. Debe coincidir con la de la base de datos | `America/Bogota` |
 | `DB_CONNECTION` | Driver de base de datos | `mariadb` |
 | `DB_HOST` | Host de la base de datos | `127.0.0.1` |
 | `DB_PORT` | Puerto de la base de datos | `3306` |
