@@ -1,14 +1,21 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Support;
 
 /**
  * Validador de datos con reglas declarativas.
  *
- * @author Fernando Luis Gil Correa
- * @version 1.0.0
- * @since 2026-10-24
- * @package App\Support
+ * @author    Fernando Luis Gil Correa
+ * @version   1.1.0
+ * @since     2026-10-24
+ * @updated   2026-10-24
+ * @package   App\Support
+ *
+ * @change    1.1.0 - 2026-10-24 - Fernando Luis Gil Correa - Semántica
+ *            numérica en min/max, fecha ISO estricta, nueva regla time y
+ *            rechazo de booleanos en integer.
  */
 class Validator
 {
@@ -43,6 +50,10 @@ class Validator
     }
 
     # Aplica una regla sobre un campo.
+    #
+    # Un campo vacío (null, '' o []) solo se evalúa con la regla `required`;
+    # el resto de reglas lo omiten. Así, "nullable" es implícito: cualquier
+    # regla distinta de `required` admite que el campo falte o esté vacío.
     private function check(string $field, string $rule, ?string $param): bool
     {
         $value = $this->data[$field] ?? null;
@@ -60,14 +71,17 @@ class Validator
             'required' => !$empty,
             'string' => is_string($value),
             'email' => is_string($value) && filter_var($value, FILTER_VALIDATE_EMAIL) !== false,
-            'integer' => filter_var($value, FILTER_VALIDATE_INT) !== false,
+            # filter_var convierte `true` en el entero 1; los booleanos no son
+            # enteros válidos en el contrato de la API y se rechazan.
+            'integer' => !is_bool($value) && filter_var($value, FILTER_VALIDATE_INT) !== false,
             'numeric' => is_numeric($value),
             'boolean' => filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) !== null,
             'array' => is_array($value),
-            'date' => is_string($value) && strtotime($value) !== false,
+            'date' => $this->isIsoDate($value),
+            'time' => $this->isTime($value),
             'in' => in_array((string) $value, explode(',', (string) $param), true),
-            'min' => $this->checkMin($value, (int) $param),
-            'max' => $this->checkMax($value, (int) $param),
+            'min' => $this->checkMin($value, (float) $param),
+            'max' => $this->checkMax($value, (float) $param),
             default => true,
         };
 
@@ -78,32 +92,71 @@ class Validator
         return $valid;
     }
 
-    # Verifica el mínimo de un valor (número, longitud o cantidad).
-    private function checkMin(mixed $value, int $min): bool
+    # Verifica el mínimo de un valor.
+    #
+    # La regla `min` (y `max`) interpreta el valor según su tipo:
+    # un array se compara por cantidad de elementos, un valor numérico
+    # (incluida una cadena numérica como "15000000.00") se compara por su
+    # valor y cualquier otra cadena se compara por su longitud. Esto permite
+    # acotar tanto el tamaño de un texto como el valor de un presupuesto.
+    private function checkMin(mixed $value, float $min): bool
     {
         if (is_array($value)) {
             return count($value) >= $min;
         }
 
-        if (is_int($value) || is_float($value)) {
-            return $value >= $min;
+        if (is_numeric($value)) {
+            return (float) $value >= $min;
         }
 
         return mb_strlen((string) $value) >= $min;
     }
 
     # Verifica el máximo de un valor (número, longitud o cantidad).
-    private function checkMax(mixed $value, int $max): bool
+    private function checkMax(mixed $value, float $max): bool
     {
         if (is_array($value)) {
             return count($value) <= $max;
         }
 
-        if (is_int($value) || is_float($value)) {
-            return $value <= $max;
+        if (is_numeric($value)) {
+            return (float) $value <= $max;
         }
 
         return mb_strlen((string) $value) <= $max;
+    }
+
+    # Comprueba una fecha en formato ISO `YYYY-MM-DD`.
+    #
+    # El validador no usa strtotime, porque es demasiado permisivo (acepta
+    # expresiones como "next monday" o "2026/01/01"). La API solo acepta el
+    # formato ISO del contrato y checkdate() descarta fechas imposibles como
+    # el 31 de febrero.
+    private function isIsoDate(mixed $value): bool
+    {
+        if (!is_string($value)) {
+            return false;
+        }
+
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $m) !== 1) {
+            return false;
+        }
+
+        return checkdate((int) $m[2], (int) $m[3], (int) $m[1]);
+    }
+
+    # Comprueba una hora en formato `HH:MM` o `HH:MM:SS` (00:00:00 a 23:59:59).
+    #
+    # La columna `time` de MySQL/MariaDB admite valores mayores (p. ej.
+    # "838:59:59"), pero el contrato de la API solo acepta horas de un día
+    # civil, que es lo que tienen sentido en una programación de licitación.
+    private function isTime(mixed $value): bool
+    {
+        if (!is_string($value)) {
+            return false;
+        }
+
+        return preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/', $value) === 1;
     }
 
     # Registra el error de validación de un campo.
@@ -129,7 +182,8 @@ class Validator
             'boolean' => "The {$attribute} field must be true or false.",
             'array' => "The {$attribute} field must be an array.",
             'date' => "The {$attribute} field must be a valid date.",
-            'in' => "The selected {$attribute} is invalid.",
+            'time' => "The {$attribute} field must be a valid time.",
+            'in' => "The {$attribute} field is invalid.",
             'min' => "The {$attribute} field must be at least {$param}.",
             'max' => "The {$attribute} field may not be greater than {$param}.",
             default => "The {$attribute} field is invalid.",
