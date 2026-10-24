@@ -1,14 +1,20 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http;
 
 /**
  * Enrutador de la aplicación.
  *
- * @author Fernando Luis Gil Correa
- * @version 1.0.0
- * @since 2026-10-22
- * @package App\Http
+ * @author    Fernando Luis Gil Correa
+ * @version   1.1.0
+ * @since     2026-10-22
+ * @updated   2026-10-24
+ * @package   App\Http
+ *
+ * @change    1.1.0 - 2026-10-24 - Fernando Luis Gil Correa - Header Allow
+ *            en las respuestas 405, con los métodos registrados para la ruta.
  */
 class Router
 {
@@ -49,10 +55,10 @@ class Router
         $this->addRoute('DELETE', $path, $action);
     }
 
-    # Despacha la solicitud actual hacia la accion correspondiente.
+    # Despacha la solicitud actual hacia la acción correspondiente.
     public function dispatch(): void
     {
-        $pathMatched = false;
+        $allowed = []; # Métodos registrados para la ruta solicitada.
 
         foreach ($this->routes as [$method, $pattern, $action]) {
             $params = $this->match($pattern, $this->request->path());
@@ -61,7 +67,7 @@ class Router
                 continue;
             }
 
-            $pathMatched = true;
+            $allowed[] = $method;
 
             if ($method !== $this->request->method()) {
                 continue;
@@ -71,9 +77,19 @@ class Router
             return;
         }
 
-        $pathMatched
-            ? Response::json(['error' => 'Method not allowed.'], 405)->send()
-            : Response::json(['error' => 'Route not found.'], 404)->send();
+        # Cuando la ruta existe pero el método no, el estándar HTTP exige un
+        # 405 con el header Allow, que lista los métodos registrados. Así el
+        # cliente sabe qué verbos puede usar sobre ese recurso.
+        if ($allowed !== []) {
+            Response::json(
+                ['error' => 'Method not allowed.'],
+                405,
+                ['Allow' => implode(', ', array_unique($allowed))]
+            )->send();
+            return;
+        }
+
+        Response::json(['error' => 'Route not found.'], 404)->send();
     }
 
     # Agrega una ruta al registro.

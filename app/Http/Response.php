@@ -1,29 +1,41 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http;
 
 /**
  * Respuesta HTTP.
  *
- * @author Fernando Luis Gil Correa
- * @version 1.0.0
- * @since 2026-10-22
- * @package App\Http
+ * @author    Fernando Luis Gil Correa
+ * @version   1.1.0
+ * @since     2026-10-22
+ * @updated   2026-10-24
+ * @package   App\Http
+ *
+ * @change    1.1.0 - 2026-10-24 - Fernando Luis Gil Correa - Headers
+ *            personalizados en las respuestas JSON y codificación que falla
+ *            de forma explícita con datos no serializables.
  */
 class Response
 {
     # Constructor de la clase Response.
     public function __construct(
     private mixed $data, # Datos de la respuesta.
-    private int $status = 200, # Codigo de estado HTTP.
+    private int $status = 200, # Código de estado HTTP.
     private array $headers = [], # Headers de la respuesta.
     )
     {}
 
     # Crea una respuesta JSON.
-    public static function json(mixed $data, int $status = 200): self
+    #
+    # Los headers adicionales se reciben como un mapa nombre => valor. Se
+    # usan, por ejemplo, para indicar los métodos permitidos en un 405
+    # (header Allow, exigido por el estándar HTTP) o la ubicación del recurso
+    # creado en un 201 (header Location).
+    public static function json(mixed $data, int $status = 200, array $headers = []): self
     {
-        return new self($data, $status);
+        return new self($data, $status, $headers);
     }
 
     # Envia la respuesta al cliente.
@@ -36,6 +48,10 @@ class Response
             header($name . ': ' . $value);
         }
 
-        echo json_encode($this->data, JSON_UNESCAPED_UNICODE);
+        # JSON_THROW_ON_ERROR convierte un dato no serializable (por ejemplo,
+        # texto con UTF-8 inválido) en una JsonException en lugar de devolver
+        # false y enviar un cuerpo vacío con un código 200. La excepción la
+        # gestiona el manejador global de errores como un 500.
+        echo json_encode($this->data, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     }
 }
