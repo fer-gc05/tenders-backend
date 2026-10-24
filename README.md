@@ -1,4 +1,4 @@
-# Suplos
+# Tenders Backend
 
 API de licitaciones construida en PHP puro, con `illuminate/database` y `illuminate/events` como componentes y Eloquent como ORM. Sigue una arquitectura MVC sin frameworks ni micro-frameworks.
 
@@ -6,26 +6,84 @@ Todas las respuestas de la API (JSON y mensajes de error) se devuelven en inglé
 
 ## Requisitos
 
-- PHP 8.3 o superior
+- PHP 8.3 o superior (probado en PHP 8.5)
 - Composer 2.x
-- MySQL o MariaDB con la extensión `pdo_mysql`
+- MariaDB o MySQL con la extensión `pdo_mysql`
 
 ## Instalación
 
 ```bash
+git clone https://github.com/fer-gc05/tenders-backend.git
+cd tenders-backend
 composer install
 cp .env.example .env
 ```
 
-Edita `.env` con las credenciales de tu base de datos y crea la base de datos `suplos`.
+Edita `.env` con las credenciales de tu base de datos. Los valores por defecto apuntan a MariaDB en `127.0.0.1:3306`, base `tenders` y usuario `root`; ajústalos a tu instalación.
+
+## Base de datos
+
+El esquema y el diagrama se conservan en `docs/db/`:
+
+| Archivo | Contenido |
+| --- | --- |
+| [`docs/db/schema.sql`](docs/db/schema.sql) | Script de construcción de la base de datos |
+| [`docs/db/tenders.png`](docs/db/tenders.png) | Diagrama entidad-relación |
+
+![Diagrama de la base de datos](docs/db/tenders.png)
+
+Para crear la base de datos y sus tablas, carga el script:
+
+```bash
+mariadb -u root -p < docs/db/schema.sql
+```
+
+El script crea la base de datos con `create database if not exists`, pero las tablas se crean sin esa salvaguarda: al reejecutarlo sobre una base ya poblada, MySQL/MariaDB responderá `Table 'activities' already exists`. Para reconstruir el esquema desde cero, elimina primero la base de datos:
+
+```bash
+mariadb -u root -p -e "DROP DATABASE IF EXISTS tenders;"
+mariadb -u root -p < docs/db/schema.sql
+```
+
+### Tablas
+
+| Tabla | Contenido |
+| --- | --- |
+| `activities` | Catálogo de productos y servicios que se pueden licitar, clasificados por segmento, familia y clase. |
+| `tenders` | Licitaciones: código consecutivo, objeto, presupuesto, moneda, fechas de apertura y cierre, estado y actividad asociada. |
+| `tender_documents` | Documentos adjuntos a cada licitación (título y ruta del archivo en el servidor). |
+
+### Relaciones
+
+- `tenders.activity_id` → `activities.id`
+- `tender_documents.tender_id` → `tenders.id`
+
+Las tres tablas registran `created_at` y `updated_at` de forma automática (`datetime` con `current_timestamp`).
 
 ## Ejecución
+
+### Servidor de desarrollo
 
 ```bash
 composer dev
 ```
 
-La aplicación queda disponible en `http://localhost:8000`. Puedes comprobar el estado de la API en `http://localhost:8000/api/v1/status`.
+Levanta el servidor embebido de PHP en `http://localhost:8000` con `public/router.php` como router, de modo que todas las rutas de la API (y no solo `/index.php`) llegan al front controller.
+
+```bash
+curl http://localhost:8000/api/v1/status
+# {"app":"tenders_backend","status":"ok"}
+```
+
+## Endpoints
+
+| Método | Ruta | Descripción | Respuesta |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/status` | Estado del servicio. | `200` `{"app":"tenders_backend","status":"ok"}` |
+
+Las rutas inexistentes responden `404` y las peticiones con un método no permitido responden `405`, siempre en JSON.
+
+El CRUD de licitaciones está en desarrollo; por ahora el único endpoint publicado es el de estado.
 
 ## Estructura
 
@@ -49,6 +107,10 @@ app/
 └── Views/                    Representación JSON de los recursos
 config/
 └── Database.php              Configuración de la base de datos
+docs/
+└── db/
+    ├── schema.sql            Construcción de la base de datos
+    └── tenders.png           Diagrama entidad-relación
 routes/
 └── api.php                   Definición de rutas de la API
 public/
@@ -60,33 +122,106 @@ El flujo MVC es `Request → Router → Controller → Model → View → Respon
 
 Las carpetas `Models` y `Views` quedan preparadas para su implementación. Las clases de `app/Http` y `app/Support` implementan la capa HTTP: el enrutador soporta rutas con parámetros (`{id}`), closures o `[Controller::class, 'metodo']`, y responde 404/405 en JSON.
 
+### Convención de documentación
+
+Las clases nuevas o modificadas llevan un encabezado que registra autoría, versión, fecha de creación, fecha de última actualización y espacio de nombres. Cada modificación añade además su entrada en el historial `@change`:
+
+```php
+/**
+ * Realiza la validación de la solicitud de autenticación mTLS y parámetros de red.
+ *
+ * @author    Fernando Luis Gil Correa
+ * @version   1.0.1
+ * @since     2026-10-24
+ * @updated   2026-10-25
+ * @package   App\Http\Requests
+ *
+ * @change    1.0.1 - 2026-10-25 - Fernando Luis Gil Correa - Ajuste de reglas de validación.
+ */
+```
+
+| Etiqueta | Regla |
+| --- | --- |
+| `@author` | Autoría del código. No cambia. |
+| `@version` | Versión semántica de la clase (`MAJOR.MINOR.PATCH`). Se incrementa en cada modificación. |
+| `@since` | Fecha real de creación del archivo. No cambia. |
+| `@updated` | Fecha de la última modificación. En la creación coincide con `@since`. |
+| `@package` | Espacio de nombres al que pertenece la clase. |
+| `@change` | Historial de cambios, con el formato `versión - fecha - autor - descripción`. Una línea por versión, la más reciente primero. |
+
+La versión sigue el criterio habitual: *patch* para ajustes internos, *minor* cuando se incorpora comportamiento nuevo y *major* cuando el cambio rompe la compatibilidad de la clase. Las clases que ya existían antes de esta convención conservan su encabezado original (`@author`, `@version`, `@since`, `@package`) hasta que se modifiquen.
+
+### Manejo de errores
+
+`App\Support\ErrorHandler` registra los manejadores global de PHP y convierte cualquier excepción en una respuesta JSON:
+
+| Situación | Código | Cuerpo |
+| --- | --- | --- |
+| Error de validación | `422` | `{"error":"Validation error.","errors":{...}}` |
+| Excepción no controlada | `500` | `{"error":"Internal server error."}` |
+
+Con `APP_ENV=local` la respuesta `500` incluye el mensaje original, el archivo y la traza, para facilitar el diagnóstico.
+
 ## Validación
 
 La validación se define en clases que extienden `App\Http\FormRequest`. El Router las detecta por el type-hint del controlador y valida **antes** de ejecutarlo; si falla, responde `422` con los errores en inglés.
 
+Cada solicitud vive en `app/Http/Requests/` y sus reglas se corresponden con las columnas de la tabla que recibe. Ejemplo para la creación de una licitación:
+
+`app/Http/Requests/StoreTenderRequest.php`
+
 ```php
-class LoginRequest extends FormRequest
+<?php
+
+namespace App\Http\Requests;
+
+use App\Http\FormRequest;
+
+class StoreTenderRequest extends FormRequest
 {
     public function rules(): array
     {
         return [
-            'email' => 'required|email|max:255',
-            'password' => 'required|string|min:8',
+            'consecutive_code' => 'required|string|max:50',
+            'subject' => 'required|string|max:150',
+            'description' => 'required|string|max:400',
+            'currency' => 'required|string|max:3|in:COP,USD,EUR',
+            'budget' => 'required|numeric',
+            'activity_id' => 'required|integer',
+            'start_date' => 'required|date',
+            'start_time' => 'required|string',
+            'close_date' => 'required|date',
+            'close_time' => 'required|string',
+            'status' => 'nullable|string|in:draft,published,closed',
         ];
     }
 }
 ```
 
+`app/Controllers/Api/V1/TenderController.php`
+
 ```php
-class LoginController extends Controller
+<?php
+
+namespace App\Controllers\Api\V1;
+
+use App\Http\Controller;
+use App\Http\Requests\StoreTenderRequest;
+use App\Http\Response;
+
+class TenderController extends Controller
 {
-    public function login(LoginRequest $request): Response
+    public function store(StoreTenderRequest $request): Response
     {
-        $credentials = $request->validated();  // solo los campos de rules()
+        $data = $request->validated();  // solo los campos de rules()
         // ...
     }
 }
 ```
+
+El controlador recibe la solicitud ya validada: si alguna regla falla, el Router interrumpe el flujo y responde `422` sin llegar a ejecutar el método.
+
+Las reglas se ajustan al esquema de `tenders`: `max` respeta la longitud de la columna, `in` acota los valores permitidos y `nullable` acepta que el campo no llegue, de modo que la base de datos aplique su valor por defecto (`draft` en el caso de `status`). `min` y `max` se aplican a la longitud de un texto, a la cantidad de elementos de un array o al valor numérico cuando el campo llega como número; por eso el presupuesto se valida solo con `numeric` y deja el rango y los decimales en manos del tipo `decimal(15,2)`.
 
 Respuesta de error:
 
@@ -94,7 +229,7 @@ Respuesta de error:
 {
     "error": "Validation error.",
     "errors": {
-        "email": ["The email field is required."]
+        "subject": ["The subject field is required."]
     }
 }
 ```
@@ -105,11 +240,11 @@ Reglas disponibles: `required`, `nullable`, `string`, `email`, `integer`, `numer
 
 | Variable | Descripción | Valor por defecto |
 | --- | --- | --- |
-| `APP_NAME` | Nombre de la aplicación | `Suplos` |
+| `APP_NAME` | Nombre de la aplicación | `tenders_backend` |
 | `APP_ENV` | Entorno de ejecución | `local` |
-| `DB_CONNECTION` | Driver de base de datos | `mysql` |
+| `DB_CONNECTION` | Driver de base de datos | `mariadb` |
 | `DB_HOST` | Host de la base de datos | `127.0.0.1` |
 | `DB_PORT` | Puerto de la base de datos | `3306` |
-| `DB_DATABASE` | Nombre de la base de datos | `suplos` |
+| `DB_DATABASE` | Nombre de la base de datos | `tenders` |
 | `DB_USERNAME` | Usuario de la base de datos | `root` |
 | `DB_PASSWORD` | Contraseña de la base de datos | vacío |
