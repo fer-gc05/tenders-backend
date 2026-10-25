@@ -7,7 +7,8 @@
         "php": "^8.3",
         "illuminate/database": "^13.38",
         "illuminate/events": "^13.38",
-        "vlucas/phpdotenv": "^5.7"
+        "vlucas/phpdotenv": "^5.7",
+        "illuminate/pagination": "^13.38"
     },
     "autoload": {
         "psr-4": {
