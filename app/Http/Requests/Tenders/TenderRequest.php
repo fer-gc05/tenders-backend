@@ -12,11 +12,12 @@ use App\Models\TenderDocument;
  * Reglas comunes de las licitaciones.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.0.1
+ * @version   1.0.2
  * @since     2026-10-24
  * @updated   2026-10-25
  * @package   App\Http\Requests
  *
+ * @change    1.0.2 - 2026-10-25 - Fernando Luis Gil Correa - El presupuesto debe ser mayor a cero y los textos no pueden contener solo espacios.
  * @change    1.0.1 - 2026-10-25 - Fernando Luis Gil Correa - Corrección de la normalización de archivos y de las validaciones de negocio.
  */
 abstract class TenderRequest extends FormRequest
@@ -27,7 +28,7 @@ abstract class TenderRequest extends FormRequest
             'subject' => 'required|string|max:150',
             'description' => 'required|string|max:400',
             'currency' => 'required|string|max:3|in:COP,USD,EUR',
-            'budget' => 'required|numeric|min:0|max:9999999999999.99',
+            'budget' => 'required|numeric|min:0.01|max:9999999999999.99',
             'activity_id' => 'required|integer',
             'start_date' => 'required|date',
             'start_time' => 'required|time',
@@ -73,6 +74,19 @@ abstract class TenderRequest extends FormRequest
     protected function after(): array
     {
         $errors = [];
+
+        /*
+         * Los textos obligatorios no pueden estar compuestos solo por espacios:
+         * la regla required solo descarta la cadena vacía, así que el control
+         * del contenido va aquí.
+         */
+        foreach (['subject', 'description'] as $field) {
+            $value = $this->body($field);
+
+            if (is_string($value) && trim($value) === '') {
+                $errors[$field] = ["The {$field} field cannot contain only spaces."];
+            }
+        }
 
         if (!Activity::find($this->body('activity_id'))) {
             $errors['activity_id'] = ['The selected activity is invalid.'];
