@@ -1,0 +1,59 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+env:
+  VPS_HOST: ${{ secrets.VPS_HOST }}
+  VPS_USER: ${{ secrets.VPS_USER }}
+  VPS_PATH: ${{ secrets.VPS_PATH }}
+
+jobs:
+  deploy:
+    name: Desplegar en la VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Obtener el código
+        uses: actions/checkout@v4
+
+      - name: Configurar la llave SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_DEPLOY_KEY }}" > ~/.ssh/tenders_deploy
+          chmod 600 ~/.ssh/tenders_deploy
+
+      - name: Sincronizar el código con la VPS
+        run: |
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude '.env' \
+            --exclude 'storage/' \
+            -e "ssh -i ~/.ssh/tenders_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+            ./ "${VPS_USER}@${VPS_HOST}:${VPS_PATH}/"
+
+      - name: Instalar dependencias y recargar PHP-FPM
+        run: |
+          ssh -i ~/.ssh/tenders_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
+            "${VPS_USER}@${VPS_HOST}" \
+            "set -e; cd '${VPS_PATH}'; mkdir -p storage/uploads; /usr/local/bin/composer install --no-dev --optimize-autoloader --no-interaction --no-progress; sudo systemctl reload php85-fpm"
+
+      - name: Verificar la API
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if curl -fsS --max-time 20 "https://${VPS_HOST}/api/v1/status" | grep -q '"status":"ok"'; then
+              echo "La API responde correctamente en https://${VPS_HOST}/api/v1/status"
+              exit 0
+            fi
+            echo "Intento ${attempt}: la API todavía no responde, reintentando en 5 segundos..."
+            sleep 5
+          done
+          echo "La API no respondió después de 5 intentos"
+          exit 1
