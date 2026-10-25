@@ -5,21 +5,197 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Http\Controller;
-
+use App\Http\Request;
+use App\Http\Requests\Tenders\StoreTenderRequest;
+use App\Http\Requests\Tenders\UpdateTenderRequest;
+use App\Http\Response;
+use App\Models\Activity;
+use App\Models\Tender;
+use App\Models\TenderDocument;
+use App\Views\TenderView;
+use Illuminate\Database\QueryException;
+use Throwable;
 
 /**
  * Controlador de las licitaciones.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.0.0
+ * @version   1.0.1
  * @since     2026-10-24
- * @updated   2026-10-24
+ * @updated   2026-10-25
  * @package   App\Controllers
  *
- * @change    1.0.0 - 2026-10-24 - Fernando Luis Gil Correa - Creación de la clase.
+ * @change    1.0.1 - 2026-10-25 - Fernando Luis Gil Correa - Corrección de síntaxis y re-throw en caso de excepción al crear.
  */
-
 class TenderController extends Controller
 {
+    # Crea una licitacion con su consecutivo y sus documentos
+    public function store(StoreTenderRequest $request): Response
+    {
+        $data = $request->validated();
+        $files = [];
 
+        try {
+            $tender = $this->create($request, $data, $files);
+        } catch (Throwable $th) {
+            $this->cleanUpFiles($files);
+            throw $th;
+        }
+
+        return Response::json(
+            ['data' => TenderView::make($tender)],
+            201,
+            ['location' => 'api/v1/tenders/' . $tender->id]
+        );
+    }
+
+    public function update(UpdateTenderRequest $request): Response
+    {
+        $tender = Tender::find((int) $request->param('id'));
+
+        if ($tender === null) {
+            return Response::json([
+                'error' => 'Tender not found.'
+            ]);
+        }
+
+        $data = $request->validated();
+        $files = [];
+
+        try {
+            $tender = (new Tender())->getConnection()->transaction(
+                function () use ($request, $data, $tender, $files): Tender {
+                    $tender->update([
+                        'subject' => $data['subject'],
+                        'description' => $data['description'],
+                        'currency' => $data['currency'],
+                        'budget' => $data['budget'],
+                        'activity_id' => (int) $data['activity_id'],
+                        'start_date' => $data['start_date'],
+                        'start_time' => $this->normalizeTime($data['start_time']),
+                        'close_date' => $data['close_date'],
+                        'close_time' => $this->normalizeTime($data['close_time']),
+                        'status' => $data['status'] ?? 'draft',
+
+                    ]);
+
+                    foreach ($request->uploads() as $files) {
+                        $documents = TenderDocument::storeUpload($files, $tender);
+                        $files[] = $documents->file_path;
+                    }
+
+                    return $tender->fresh(['activity', 'documents']);
+                }
+            );
+        } catch (Throwable $th) {
+            $this->cleanUpFiles($files);
+            throw $th;
+        }
+
+        return Response::json([
+            'data' => TenderView::detail($tender, $tender->activity, $tender->documents)
+        ]);
+    }
+
+    public function index(Request $request): Response
+    {
+        $query = Tender::query()->with('activity');
+        $status = $request->query('status');
+
+        if (is_string($status) && $status !== '') {
+            $query->where('status', $status);
+        }
+
+        $activity = $request->query('activity_id');
+        if (is_string($activity) && $activity !== '') {
+            $query->where('activity_id', (int) $activity);
+        }
+
+        $search = $request->query('search');
+        if (is_string($search) && $search !== '') {
+            $query->where('search', 'like', '%' . $search . '%');
+        }
+
+        $page = max(1, (int) ($request->query('page') ?: 1));
+        $perPage = min(50, max(1, (int) ($request->query('per_page') ?? 15)));
+        $paginator = $query->orderByDesc('id')->paginate($perPage, ['*'], 'page', $page);
+
+        return Response::json([
+            TenderView::paginated($paginator)
+        ]);
+    }
+
+    public function show(Request $request): Response
+    {
+        $tender = Tender::with(['activity', 'documents'])->find((int) $request->param('id'));
+
+        if ($tender === null) {
+            return Response::json([
+                'error' => 'Tender not found.'
+            ], 404);
+        }
+
+        return Response::json([
+            'data' => TenderView::detail($tender, $tender->activity, $tender->documents)
+        ]);
+
+    }
+
+
+
+    private function create(StoreTenderRequest $request, array $data, array &$files): Tender
+    {
+        $intents = 3;
+
+        while (true) {
+            try {
+                return (new Tender())->getConnection()->transaction(
+                    function () use ($request, $data, &$files): Tender {
+                        $tender = Tender::create([
+                            'consecutive_code' => Tender::nextConsecutiveCode(),
+                            'subject' => $data['subject'],
+                            'description' => $data['description'],
+                            'currency' => $data['currency'],
+                            'budget' => $data['budget'],
+                            'activity_id' => (int) $data['activity_id'],
+                            'start_date' => $data['start_date'],
+                            'start_time' => $this->normalizeTime($data['start_time']),
+                            'close_date' => $data['close_date'],
+                            'close_time' => $this->normalizeTime($data['close_time']),
+                            'status' => $data['status'] ?? 'draft',
+                        ]);
+
+                        foreach ($request->uploads() as $file) {
+                            $file = TenderDocument::storeUpload($file, $tender);
+                            $files[] = $file->file_path;
+                        }
+
+                        return $tender;
+                    }
+                );
+            } catch (QueryException $e) {
+                $intents--;
+                if (!$this->isDuplicateConsecutive($e) || $intents <= 0) {
+                    throw $e;
+                }
+            }
+        }
+    }
+
+    private function cleanUpFiles(array $files): void
+    {
+        foreach ($files as $file) {
+            TenderDocument::deleteFile($file);
+        }
+    }
+
+    private function normalizeTime(string $time): string
+    {
+        return strlen($time) === 5 ? $time . ':00' : $time;
+    }
+
+    private function isDuplicateConsecutive(QueryException $e): bool
+    {
+        return $e->getCode() === '23000' && str_contains($e->getMessage(), 'consecutive_code');
+    }
 }
