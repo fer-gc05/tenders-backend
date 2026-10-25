@@ -6,17 +6,18 @@ namespace App\Http\Requests\Tenders;
 
 use App\Http\FormRequest;
 use App\Models\Activity;
+use App\Models\TenderDocument;
 
 /**
  * Reglas comunes de las licitaciones.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.0.0
+ * @version   1.0.1
  * @since     2026-10-24
- * @updated   2026-10-24
+ * @updated   2026-10-25
  * @package   App\Http\Requests
  *
- * @change    1.0.0 - 2026-10-24 - Fernando Luis Gil Correa - Creación de la clase.
+ * @change    1.0.1 - 2026-10-25 - Fernando Luis Gil Correa - Corrección de la normalización de archivos y de las validaciones de negocio.
  */
 abstract class TenderRequest extends FormRequest
 {
@@ -36,15 +37,22 @@ abstract class TenderRequest extends FormRequest
         ];
     }
 
+    /**
+     * Normaliza los archivos subidos en la petición a una lista.
+     *
+     * El campo de la petición se llama "documents". PHP entrega los archivos
+     * múltiples como arreglos paralelos, así que se reorganizan en una lista
+     * de archivos con la misma estructura.
+     */
     public function uploads(): array
     {
-        $files = $_FILES['documents'];
+        $files = $_FILES['documents'] ?? [];
 
-        if (isset($files['name'])) {
+        if (!isset($files['name'])) {
             return [];
         }
 
-        if (array_keys($files['name'])) {
+        if (!is_array($files['name'])) {
             return [$files];
         }
 
@@ -53,9 +61,9 @@ abstract class TenderRequest extends FormRequest
         foreach (array_keys($files['name']) as $index) {
             $list[] = [
                 'name' => $files['name'][$index],
-                'tpm_name' => $files['tpm_name'][$index],
+                'tmp_name' => $files['tmp_name'][$index],
                 'error' => $files['error'][$index],
-                'size' => $files['size'][$index]
+                'size' => $files['size'][$index],
             ];
         }
 
@@ -64,17 +72,21 @@ abstract class TenderRequest extends FormRequest
 
     protected function after(): array
     {
+        $errors = [];
+
         if (!Activity::find($this->body('activity_id'))) {
-            $errors['activaty_id'] = ['The selected activity is invalid.'];
+            $errors['activity_id'] = ['The selected activity is invalid.'];
         }
 
-        if ($this->closureIsAfterStart()) {
-            $errors['close_date'] = ['The close date and time must be after the start date and time'];
+        if (!$this->closureIsAfterStart()) {
+            $errors['close_date'] = ['The close date and time must be after the start date and time.'];
         }
 
         $fileErrors = [];
 
         foreach ($this->uploads() as $file) {
+            $error = TenderDocument::validateUpload($file);
+
             if ($error !== null) {
                 $fileErrors[] = $error;
             }
@@ -96,7 +108,6 @@ abstract class TenderRequest extends FormRequest
             return true;
         }
 
-        return $start > $close;
+        return $close > $start;
     }
-
 }
