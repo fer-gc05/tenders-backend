@@ -11,13 +11,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * Modelo de la tabla activities(actividades).
  *
- * @author Fernando Luis Gil Correa
- * @version 1.0.0
- * @since 2026-10-24
- * @updated 2026-10-24
- * @package App\Models
- * 
- * @change 1.0.0 - Fernando Luis Gil Correa - Creación del modelo.
+ * @author    Fernando Luis Gil Correa
+ * @version   1.0.1
+ * @since     2026-10-24
+ * @updated   2026-10-25
+ * @package   App\Models
+ *
+ * @change    1.0.1 - 2026-10-25 - Fernando Luis Gil Correa - Normalización del encabezado de documentación.
  */
 class Activity extends Model
 {
