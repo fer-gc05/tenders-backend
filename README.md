@@ -82,6 +82,9 @@ curl http://localhost:8000/api/v1/status
 | `GET` | `/api/v1/status` | Estado del servicio. | `200` `{"app":"tenders_backend","status":"ok"}` |
 | `GET` | `/api/v1/activities` | Lista el catálogo de actividades; alimenta el selector del formulario. | `200` `{"data":[...]}` |
 | `GET` | `/api/v1/activities/{id}` | Detalle de una actividad. | `200` `{"data":{...}}` |
+| `POST` | `/api/v1/activities` | Crea una actividad del catálogo. | `201` con la actividad creada |
+| `PUT` | `/api/v1/activities/{id}` | Actualiza una actividad del catálogo. | `200` con la actividad actualizada |
+| `DELETE` | `/api/v1/activities/{id}` | Elimina una actividad del catálogo; responde `409` si tiene licitaciones asociadas. | `204` |
 | `POST` | `/api/v1/tenders` | Crea una licitación; acepta JSON o `multipart/form-data` con documentos. | `201` con la licitación creada |
 | `GET` | `/api/v1/tenders` | Lista las licitaciones con filtros y paginación. | `200` `{"data":[...],"meta":{...}}` |
 | `GET` | `/api/v1/tenders/export` | Descarga el reporte Excel del listado, sin paginación. | `200` archivo `.xlsx` |
@@ -183,7 +186,7 @@ app/
 │   └── Database.php          Inicialización de la conexión y Eloquent
 ├── Controllers/
 │   ├── TenderController.php  Creación, edición, listado, detalle y reporte Excel de licitaciones
-│   ├── ActivityController.php Listado y detalle del catálogo de actividades
+│   ├── ActivityController.php Listado, detalle y CRUD del catálogo de actividades
 │   └── DocumentController.php Descarga de los documentos adjuntos
 ├── Http/
 │   ├── Controller.php        Controlador base
