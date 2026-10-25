@@ -13,12 +13,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * Modelo de la tabla tenders(licitaciones-ofertas).
  *
  * @author Fernando Luis Gil Correa
- * @version 1.0.0
+ * @version 1.0.1
  * @since 2026-10-24
  * @updated 2026-10-24
  * @package App\Models
  * 
- * @change 1.0.0 - Fernando Luis Gil Correa - Creación del modelo.
+ * @change 1.0.1 - Fernando Luis Gil Correa - Creacion metodo generador de consecutivos.
  */
 class Tender extends Model
 {
@@ -39,6 +39,11 @@ class Tender extends Model
 
     protected $casts = [
         'activity_id' => 'integer',
+        'start_date' => 'date:Y-m-d',
+        'start_time' => 'time:H:i:s',
+        'close_date' => 'date:Y-m-d',
+        'close_time' => 'time:H:i:s',
+        'budget' => 'decimal:2',
     ];
 
     # Relación con la tabla activities(actividades).
@@ -51,5 +56,18 @@ class Tender extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(TenderDocument::class);
+    }
+
+    # Generar consecutivo siguiente.
+    public function nextConsecutiveCode(): string
+    {
+        $year = substr((string) date('Y'), -2);
+
+        $last = (int) static::query()
+            ->where('consecutive_code', 'like', "PO-%-{$year}")
+            ->selectRaw('MAX(consecutive_code, 4, 4) AS UNSIGNED)) AS LAST')
+            ->value('LAST');
+
+        return sprintf('PO-%04d-%s', $last + 1, $year);
     }
 }
