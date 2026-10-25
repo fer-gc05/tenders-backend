@@ -10,18 +10,19 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Modelo de la tabla tender_documents(documentos de licitaciones-ofertas).
  *
- * @author Fernando Luis Gil Correa
- * @version 1.0.1
- * @since 2026-10-24
- * @updated 2026-10-24
- * @package App\Models
- * 
- * @change 1.0.1 - Fernando Luis Gil Correa - Implementacion de metodos auxiliares para menejo de archivos.
+ * @author    Fernando Luis Gil Correa
+ * @version   1.0.2
+ * @since     2026-10-24
+ * @updated   2026-10-25
+ * @package   App\Models
+ *
+ * @change    1.0.2 - 2026-10-25 - Fernando Luis Gil Correa - Corrección del límite de tamaño, de la clave del archivo temporal y de los metodos de ruta y eliminacion.
+ * @change    1.0.1 - 2026-10-24 - Fernando Luis Gil Correa - Implementacion de metodos auxiliares para menejo de archivos.
  */
 class TenderDocument extends Model
 {
     # Tamaño maximo permitido(10MB)
-    public const MAX_SIZE_BYTES = 1048576;
+    public const MAX_SIZE_BYTES = 10485760;
 
     # Tipos aceptados
     protected const ALLOWED_MIMES = [
@@ -31,6 +32,7 @@ class TenderDocument extends Model
     ];
 
     protected $table = 'tender_documents';
+
     protected $fillable = [
         'tender_id',
         'title',
@@ -47,21 +49,24 @@ class TenderDocument extends Model
         return $this->belongsTo(Tender::class);
     }
 
-    # Validacion de arrchivos subidos. Retorna error en caso de invalides de archivos.
+    /**
+     * Valida un archivo subido y retorna el mensaje de error en ingles, o
+     * null cuando el archivo es valido.
+     *
+     * Si el archivo no trae codigo de error se asume UPLOAD_ERR_NO_FILE (4).
+     */
     public static function validateUpload(array $file): ?string
     {
-        /**Extrae el error en caso de no extraerlo usa por defecto el 
-         *codigo UPLOAD_ERR_NO_FILE = 4.
-         **/
         $error = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
 
-        /**Si el error que se estrae es distinto a
-         *UPLOAD_ERR_OK = 0. Valida con los siguintes posibles errores:
-         *UPLOAD_ERR_INI_SIZE = 1, UPLOAD_ERR_FORM_SIZE = 2, UPLOAD_ERR_PARTIAL = 3, UPLOAD_ERR_NO_FILE=4.
-         **/
+        /*
+         * Los errores de subida que se contemplan son:
+         * UPLOAD_ERR_OK = 0, UPLOAD_ERR_INI_SIZE = 1, UPLOAD_ERR_FORM_SIZE = 2,
+         * UPLOAD_ERR_PARTIAL = 3 y UPLOAD_ERR_NO_FILE = 4.
+         */
         if ($error !== UPLOAD_ERR_OK) {
             return match ($error) {
-                UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'The document exceeds the maximun allowed size of 10 MB.',
+                UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'The document exceeds the maximum allowed size of 10 MB.',
                 UPLOAD_ERR_PARTIAL => 'The uploaded file was only partially uploaded.',
                 UPLOAD_ERR_NO_FILE => 'No file was uploaded.',
                 default => 'The document failed upload.'
@@ -75,40 +80,42 @@ class TenderDocument extends Model
         }
 
         if ($size > self::MAX_SIZE_BYTES) {
-            return 'The document exceeds the maximun allowed size of 10 MB.';
+            return 'The document exceeds the maximum allowed size of 10 MB.';
         }
 
-        if (!in_array(self::detectdMime((string) $file['temp_name']), self::ALLOWED_MIMES, true)) {
-            return 'The document must be a PDF or ZIP file';
+        /*
+         * El tipo se comprueba sobre el contenido real del archivo, nunca
+         * sobre el tipo que declara el cliente.
+         */
+        if (!in_array(self::detectMime((string) $file['tmp_name']), self::ALLOWED_MIMES, true)) {
+            return 'The document must be a PDF or ZIP file.';
         }
 
         return null;
     }
 
-    # Detecta el tipo de archivo a partir de su ruta.
-    public static function detectdMime(string $route): ?string
+    /**
+     * Detecta el tipo de archivo a partir de su ruta.
+     *
+     * finfo (File Information) es la extensión nativa de PHP que inspecciona
+     * el contenido real del archivo y determina su tipo MIME.
+     */
+    public static function detectMime(string $route): ?string
     {
-        /** 
-         *Crea el recurso finfo para detectar el tipo de archivo.
-         *finfo (File Information): extensión nativa de PHP que
-         *ayuda a inspeccionar y determinar el tipo MIME
-         *(Multipurpose Internet Mail Extensions) y la codificación
-         *de un archivo analizando su contenido real.
-         */
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
 
         if ($finfo === false) {
-            return '';
+            return null;
         }
 
         $mime = finfo_file($finfo, $route);
         finfo_close($finfo);
 
-        return is_string($mime) ? $mime : '';
+        return is_string($mime) ? $mime : null;
     }
 
     # Devuelve la extensión de un archivo a partir de su tipo MIME.
-    public static function extensionFor(string $mime): string
+    public static function extensionFor(?string $mime): string
     {
         return match ($mime) {
             'application/pdf' => 'pdf',
@@ -117,10 +124,16 @@ class TenderDocument extends Model
         };
     }
 
-    # Almacena un archivo subido en el servidor.
+    /**
+     * Almacena un archivo subido en el servidor.
+     *
+     * El nombre que envia el cliente nunca se usa en el sistema de archivos,
+     * solo se conserva como titulo del documento. El archivo se guarda con un
+     * nombre aleatorio y con la extension del tipo real detectado.
+     */
     public static function storeUpload(array $file, Tender $tender): self
     {
-        $extension = self::extensionFor(self::detectdMime((string) $file['temp_name']));
+        $extension = self::extensionFor(self::detectMime((string) $file['tmp_name']));
         $folder = 'uploads/' . date('Y/m');
         $directory = self::storagePath($folder);
 
@@ -128,15 +141,20 @@ class TenderDocument extends Model
             mkdir($directory, 0750, true);
         }
 
-        # Genera un nombre único de 32 caracteres hexadecimales.
-        # random_bytes(16): genera 16 bytes aleatorios criptográficamente seguros.
-        # bin2hex(): convierte los bytes binarios a una cadena hexadecimal de 32 caracteres.
+        /*
+         * Genera un nombre único de 32 caracteres hexadecimales.
+         * random_bytes(16): genera 16 bytes aleatorios criptográficamente seguros.
+         * bin2hex(): convierte los bytes binarios a una cadena hexadecimal de 32 caracteres.
+         */
         $name = bin2hex(random_bytes(16)) . '.' . $extension;
         $destination = $directory . '/' . $name;
 
-        # Mueve el archivo cargado desde el directorio temporal del servidor ($file['temp_name'])
-        # hacia la ruta de destino final ($destination), validando previamente que sea una subida HTTP POST válida.
-        move_uploaded_file((string) $file['temp_name'], $destination);
+        /*
+         * Mueve el archivo cargado desde el directorio temporal del servidor
+         * ($file['tmp_name']) hacia la ruta de destino final ($destination),
+         * validando previamente que sea una subida HTTP POST válida.
+         */
+        move_uploaded_file((string) $file['tmp_name'], $destination);
 
         return static::create([
             'tender_id' => $tender->id,
@@ -145,28 +163,36 @@ class TenderDocument extends Model
         ]);
     }
 
-    # Retorna la ruta absoluta de un archivo en el servidor.
+    /**
+     * Retorna la ruta absoluta de un archivo en el servidor.
+     *
+     * realpath() resuelve enlaces simbólicos y referencias relativas ('..', '.').
+     */
     public static function absolutePath(string $relativePath): ?string
     {
         # Obtiene y resuelve la ruta absoluta real del directorio base de almacenamiento.
-        # realpath() resuelve enlaces simbólicos y referencias relativas ('..', '.').
-        $base = realpath(self::storegePath());
+        $base = realpath(self::storagePath());
 
         # Si el directorio base no existe en el sistema de archivos, retorna null.
         if ($base === false) {
             return null;
         }
 
-        # Resuelve la ruta absoluta real del archivo solicitado.
-        # Si el archivo no existe o la ruta es inválida, realpath() retorna false.
+        /*
+         * Resuelve la ruta absoluta real del archivo solicitado.
+         * Si el archivo no existe o la ruta es inválida, realpath() retorna false.
+         */
         $absolute = realpath(self::storagePath($relativePath));
+
         if ($absolute === false) {
             return null;
         }
 
-        # Control de Seguridad (Anti Path Traversal):
-        # Verifica estrictamente que la ruta resuelta comience con el prefijo del directorio base.
-        # Esto evita que un usuario intente acceder a archivos fuera del storage usando '../'.
+        /*
+         * Control de Seguridad (Anti Path Traversal):
+         * Verifica estrictamente que la ruta resuelta comience con el prefijo del directorio base.
+         * Esto evita que un usuario intente acceder a archivos fuera del storage usando '../'.
+         */
         if (!str_starts_with($absolute, $base . DIRECTORY_SEPARATOR)) {
             return null;
         }
@@ -175,23 +201,30 @@ class TenderDocument extends Model
     }
 
     # Elimina un archivo del servidor.
-    public static function deleteFile(string $relativeRoute)
+    public static function deleteFile(string $relativeRoute): void
     {
-        $absolute = realpath(self::storegePath());
+        $absolute = self::absolutePath($relativeRoute);
 
         if ($absolute !== null && is_file($absolute)) {
             unlink($absolute);
         }
     }
 
-    #Retorn la ruta absoluta dentro del directorio de almacenamiento(storage)
-    public static function storegePath(string $relativePath = ''): string
+    /**
+     * Retorna la ruta absoluta dentro del directorio de almacenamiento(storage).
+     *
+     * Define la ruta absoluta base del directorio 'storage' navegando 2 niveles
+     * hacia arriba desde el directorio actual.
+     */
+    public static function storagePath(string $relativePath = ''): string
     {
-        # Define la ruta absoluta base del directorio 'storage' navegando 2 niveles hacia arriba desde el directorio actual.
         $base = dirname(__DIR__, 2) . '/storage';
 
-        # Si no se especifica una ruta relativa, retorna la ruta base del storage.
-        # En caso contrario, concatena la ruta base con la relativa, removiendo barras iniciales sobrantes (ltrim) para evitar rutas con '//'.
+        /*
+         * Si no se especifica una ruta relativa, retorna la ruta base del storage.
+         * En caso contrario, concatena la ruta base con la relativa, removiendo
+         * barras iniciales sobrantes (ltrim) para evitar rutas con '//'.
+         */
         return $relativePath === '' ? $base : $base . '/' . ltrim($relativePath, '/');
     }
 }
