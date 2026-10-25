@@ -43,7 +43,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/tenders_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
             "${VPS_USER}@${VPS_HOST}" \
-            "set -e; cd '${VPS_PATH}'; mkdir -p storage/uploads; /usr/local/bin/composer install --no-dev --optimize-autoloader --no-interaction --no-progress; sudo systemctl reload php85-fpm"
+            "set -e; cd '${VPS_PATH}'; mkdir -p storage/uploads; /usr/local/bin/composer install --no-dev --optimize-autoloader --no-interaction --no-progress; sudo -n systemctl reload php85-fpm"
 
       - name: Verificar la API
         run: |
