@@ -80,8 +80,11 @@ curl http://localhost:8000/api/v1/status
 | Método | Ruta | Descripción | Respuesta |
 | --- | --- | --- | --- |
 | `GET` | `/api/v1/status` | Estado del servicio. | `200` `{"app":"tenders_backend","status":"ok"}` |
+| `GET` | `/api/v1/activities` | Lista el catálogo de actividades; alimenta el selector del formulario. | `200` `{"data":[...]}` |
+| `GET` | `/api/v1/activities/{id}` | Detalle de una actividad. | `200` `{"data":{...}}` |
 | `POST` | `/api/v1/tenders` | Crea una licitación; acepta JSON o `multipart/form-data` con documentos. | `201` con la licitación creada |
 | `GET` | `/api/v1/tenders` | Lista las licitaciones con filtros y paginación. | `200` `{"data":[...],"meta":{...}}` |
+| `GET` | `/api/v1/tenders/export` | Descarga el reporte Excel del listado, sin paginación. | `200` archivo `.xlsx` |
 | `GET` | `/api/v1/tenders/{id}` | Detalle de una licitación con su actividad y sus documentos. | `200` `{"data":{...}}` |
 | `POST` | `/api/v1/tenders/{id}` | Actualiza una licitación; acepta `multipart/form-data` para añadir documentos. | `200` con la licitación actualizada |
 | `PUT` | `/api/v1/tenders/{id}` | Actualiza una licitación con JSON (no admite archivos). | `200` con la licitación actualizada |
@@ -95,11 +98,50 @@ Las rutas inexistentes responden `404` y las peticiones con un método no permit
 | --- | --- |
 | `status` | Filtra por estado (`draft`, `published`, `closed`). |
 | `activity_id` | Filtra por el identificador de la actividad. |
-| `search` | Busca coincidencias en el objeto de la licitación. |
+| `search` | Busca coincidencias en el consecutivo, el objeto o la descripción. |
 | `page` | Página actual (por defecto `1`). |
 | `per_page` | Resultados por página (por defecto `15`, máximo `50`). |
 
 La respuesta del listado envuelve los resultados en `data` y la paginación en `meta` (`total`, `current_page`, `per_page`, `last_page`).
+
+### Catálogo de actividades
+
+`GET /api/v1/activities` devuelve el catálogo completo de actividades, ordenado por `product_name`, porque alimenta el selector de actividad del formulario de licitaciones. El parámetro opcional `search` filtra por nombre o código de producto, segmento, familia o clase:
+
+```json
+{
+    "data": [
+        {
+            "id": 1,
+            "segment_code": 1,
+            "segment_name": "Segmento",
+            "family_code": 1,
+            "family_name": "Familia",
+            "class_code": 1,
+            "class_name": "Clase",
+            "product_code": "TEST-001",
+            "product_name": "Producto de prueba",
+            "created_at": "2026-10-25T12:27:43-05:00",
+            "updated_at": "2026-10-25T12:27:43-05:00"
+        }
+    ]
+}
+```
+
+### Reporte Excel
+
+`GET /api/v1/tenders/export` descarga el reporte del listado como un archivo `.xlsx` generado por el backend. Aplica los mismos filtros del listado (`status`, `activity_id`, `search`), pero **sin paginación**: el archivo contiene todas las licitaciones que cumplen los filtros.
+
+| Detalle | Valor |
+| --- | --- |
+| Nombre del archivo | `licitaciones-YYYY-MM-DD.xlsx` |
+| Hoja | `Licitaciones` |
+| Columnas | Consecutivo, Objeto, Descripción, Fecha de inicio, Fecha de cierre, Estado |
+| Formato | `.xlsx` (Open XML), con encabezado en negrita, anchos de columna, fechas como fechas de Excel, primera fila congelada y autofiltro |
+
+```bash
+curl -OJ "http://localhost:8000/api/v1/tenders/export?status=published"
+```
 
 ### Código consecutivo
 
@@ -140,7 +182,8 @@ app/
 ├── Config/
 │   └── Database.php          Inicialización de la conexión y Eloquent
 ├── Controllers/
-│   ├── TenderController.php  Creación, edición, listado y detalle de licitaciones
+│   ├── TenderController.php  Creación, edición, listado, detalle y reporte Excel de licitaciones
+│   ├── ActivityController.php Listado y detalle del catálogo de actividades
 │   └── DocumentController.php Descarga de los documentos adjuntos
 ├── Http/
 │   ├── Controller.php        Controlador base
@@ -160,6 +203,8 @@ app/
 │   └── Validator.php         Motor de reglas de validación
 └── Views/
     ├── TenderView.php        Representación JSON de las licitaciones
+    ├── ActivityView.php      Representación JSON de las actividades
+    ├── TendersXlsxView.php   Generador del reporte Excel del listado
     └── DocumentView.php      Representación JSON de los documentos
 config/
 └── Database.php              Configuración de la base de datos
@@ -243,7 +288,7 @@ abstract class TenderRequest extends FormRequest
             'subject' => 'required|string|max:150',
             'description' => 'required|string|max:400',
             'currency' => 'required|string|max:3|in:COP,USD,EUR',
-            'budget' => 'required|numeric|min:0|max:9999999999999.99',
+            'budget' => 'required|numeric|min:0.01|max:9999999999999.99',
             'activity_id' => 'required|integer',
             'start_date' => 'required|date',
             'start_time' => 'required|time',
@@ -278,7 +323,7 @@ class TenderController extends Controller
 
 El controlador recibe la solicitud ya validada: si alguna regla falla, el Router interrumpe el flujo y responde `422` sin llegar a ejecutar el método.
 
-Las reglas se ajustan al esquema de `tenders`: `max` respeta la longitud de la columna, `in` acota los valores permitidos y `nullable` acepta que el campo no llegue, de modo que la base de datos aplique su valor por defecto (`draft` en el caso de `status`). `min` y `max` interpretan el valor según su tipo: un array se compara por la cantidad de elementos, un valor numérico (incluida una cadena como `"15000000.00"`) por su valor y cualquier otra cadena por su longitud; así, el presupuesto se acota con `numeric|min:0` y los textos con `max:<longitud de la columna>`. La regla `date` exige el formato ISO `YYYY-MM-DD` (rechaza `"next monday"` o el 31 de febrero) y `time` exige `HH:MM` o `HH:MM:SS` entre `00:00:00` y `23:59:59`.
+Las reglas se ajustan al esquema de `tenders`: `max` respeta la longitud de la columna, `in` acota los valores permitidos y `nullable` acepta que el campo no llegue, de modo que la base de datos aplique su valor por defecto (`draft` en el caso de `status`). `min` y `max` interpretan el valor según su tipo: un array se compara por la cantidad de elementos, un valor numérico (incluida una cadena como `"15000000.00"`) por su valor y cualquier otra cadena por su longitud; así, el presupuesto se acota con `numeric|min:0.01` (debe ser mayor a cero) y los textos con `max:<longitud de la columna>`. La regla `date` exige el formato ISO `YYYY-MM-DD` (rechaza `"next monday"` o el 31 de febrero) y `time` exige `HH:MM` o `HH:MM:SS` entre `00:00:00` y `23:59:59`.
 
 Respuesta de error:
 
@@ -313,6 +358,18 @@ protected function after(): array
 ```
 
 La actualización de licitaciones añade además que la licitación conserve al menos un documento: los que ya tiene más los nuevos que se suben.
+
+Los textos obligatorios (objeto y descripción) tampoco pueden estar compuestos solo por espacios. La regla `required` solo descarta la cadena vacía, así que ese control se hace en el hook `after()`:
+
+```php
+foreach (['subject', 'description'] as $field) {
+    $value = $this->body($field);
+
+    if (is_string($value) && trim($value) === '') {
+        $errors[$field] = ["The {$field} field cannot contain only spaces."];
+    }
+}
+```
 
 ## Variables de entorno
 
