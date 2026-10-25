@@ -11,6 +11,7 @@ use App\Http\Requests\Tenders\UpdateTenderRequest;
 use App\Http\Response;
 use App\Models\Tender;
 use App\Models\TenderDocument;
+use App\Views\TendersXlsxView;
 use App\Views\TenderView;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
@@ -20,11 +21,12 @@ use Throwable;
  * Controlador de las licitaciones.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.0.3
+ * @version   1.0.4
  * @since     2026-10-24
  * @updated   2026-10-25
  * @package   App\Controllers
  *
+ * @change    1.0.4 - 2026-10-25 - Fernando Luis Gil Correa - Descarga del reporte Excel del listado de licitaciones.
  * @change    1.0.3 - 2026-10-25 - Fernando Luis Gil Correa - El buscador del listado filtra por consecutivo, objeto y descripción.
  * @change    1.0.2 - 2026-10-25 - Fernando Luis Gil Correa - Corrección del 404, del header Location, del guardado de documentos y de los filtros del listado.
  * @change    1.0.1 - 2026-10-25 - Fernando Luis Gil Correa - Corrección de sintaxis y re-throw en caso de excepción al crear.
@@ -106,6 +108,27 @@ class TenderController extends Controller
         $paginator = $this->filtered($request)->orderByDesc('id')->paginate($perPage, ['*'], 'page', $page);
 
         return Response::json(TenderView::paginated($paginator));
+    }
+
+    /**
+     * Descarga el reporte Excel del listado de licitaciones.
+     *
+     * Aplica los mismos filtros del listado, pero sin paginacion: el reporte
+     * contiene todas las licitaciones que cumplen los filtros.
+     */
+    public function export(Request $request): Response
+    {
+        $tenders = $this->filtered($request)->orderByDesc('id')->get();
+        $binary = TendersXlsxView::build($tenders);
+        $name = TendersXlsxView::filename();
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Length: ' . (string) strlen($binary));
+        header('Content-Disposition: attachment; filename="' . $name . '"');
+        header('X-Content-Type-Options: nosniff');
+
+        echo $binary;
+        exit;
     }
 
     /**
