@@ -6,11 +6,12 @@ declare(strict_types=1);
  * Definición de rutas de la API.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.0.4
+ * @version   1.0.5
  * @since     2026-10-24
  * @updated   2026-10-25
  * @package   Routes
  *
+ * @change    1.0.5 - 2026-10-25 - Fernando Luis Gil Correa - Registro de las rutas del catalogo de actividades.
  * @change    1.0.4 - 2026-10-25 - Fernando Luis Gil Correa - Registro de la ruta de descarga del reporte Excel de licitaciones.
  * @change    1.0.3 - 2026-10-25 - Fernando Luis Gil Correa - Registro de las rutas del catalogo de actividades.
  * @change    1.0.2 - 2026-10-25 - Fernando Luis Gil Correa - Registro de las rutas del CRUD de licitaciones y de la descarga de documentos.
@@ -36,6 +37,9 @@ $router->get('/api/v1/status', function (Request $request): Response {
 
 $router->get('/api/v1/activities', [ActivityController::class, 'index']);
 $router->get('/api/v1/activities/{id}', [ActivityController::class, 'show']);
+$router->post('/api/v1/activities', [ActivityController::class, 'store']);
+$router->put('/api/v1/activities/{id}', [ActivityController::class, 'update']);
+$router->delete('/api/v1/activities/{id}', [ActivityController::class, 'destroy']);
 $router->post('/api/v1/tenders', [TenderController::class, 'store']);
 $router->get('/api/v1/tenders', [TenderController::class, 'index']);
 $router->get('/api/v1/tenders/export', [TenderController::class, 'export']);
