@@ -6,15 +6,16 @@ declare(strict_types=1);
  * Definición de rutas de la API.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.0.1
+ * @version   1.0.2
  * @since     2026-10-24
- * @updated   2026-10-24
+ * @updated   2026-10-25
  * @package   Routes
  *
- * @change    1.0.1 - 2026-10-24 - Fernando Luis Gil Correa - Tipos
- *            estrictos.
+ * @change    1.0.2 - 2026-10-25 - Fernando Luis Gil Correa - Implementacion de nuevos endpoints para manejo de licitaciones.
  */
 
+use App\Controllers\DocumentController;
+use App\Controllers\TenderController;
 use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
@@ -28,7 +29,10 @@ $router->get('/api/v1/status', function (Request $request): Response {
     ]);
 });
 
-# Aqui se registran los controladores:
-# $router->get('/api/v1/licitaciones', [LicitacionController::class, 'index']);
+$router->post('/api/v1/tenders', [TenderController::class, 'store']);
+$router->get('/api/v1/tenders', [TenderController::class, 'index']);
+$router->get('/api/v1/tenders/{id}', [TenderController::class, 'show']);
+$router->post('/api/v1/tenders/{id}', [TenderController::class, 'update']);
+$router->get('/api/v1/tenders/{id}/documents/{documentId}', [DocumentController::class, 'download']);
 
 return $router;
