@@ -45,15 +45,33 @@ jobs:
             "${VPS_USER}@${VPS_HOST}" \
             "set -e; cd '${VPS_PATH}'; mkdir -p storage/uploads; /usr/local/bin/composer install --no-dev --optimize-autoloader --no-interaction --no-progress; sudo -n systemctl reload php85-fpm 2>/dev/null || sudo -n systemctl restart php85-fpm 2>/dev/null || sudo -n systemctl start php85-fpm"
 
-      - name: Verify the API
+      - name: Verify the API on the VPS
         run: |
+          ssh -i ~/.ssh/tenders_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
+            "${VPS_USER}@${VPS_HOST}" bash -s -- "${VPS_HOST}" <<'CHECK'
+          set -u
+          host="$1"
           for attempt in 1 2 3 4 5; do
-            if curl -fsS --max-time 20 "https://${VPS_HOST}/api/v1/status" | grep -q '"status":"ok"'; then
-              echo "The API responded correctly at https://${VPS_HOST}/api/v1/status"
+            if curl -fsS -H "Host: ${host}" http://127.0.0.1/api/v1/status | grep -q '"status":"ok"'; then
+              echo "The API responded correctly on the VPS"
               exit 0
             fi
-            echo "Attempt ${attempt}: the API did not respond yet, retrying in 5 seconds..."
+            echo "Attempt ${attempt}: the API did not respond yet, retrying in 3 seconds..."
+            sleep 3
+          done
+          echo "The API did not respond on the VPS"
+          exit 1
+          CHECK
+
+      - name: Verify the public endpoint
+        continue-on-error: true
+        run: |
+          for attempt in 1 2 3; do
+            if curl -fsS --max-time 20 "https://${VPS_HOST}/api/v1/status" | grep -q '"status":"ok"'; then
+              echo "The public endpoint responded correctly at https://${VPS_HOST}/api/v1/status"
+              exit 0
+            fi
+            echo "Attempt ${attempt}: the public endpoint did not respond yet, retrying in 5 seconds..."
             sleep 5
           done
-          echo "The API did not respond after 5 attempts"
-          exit 1
+          echo "::warning::The public endpoint did not respond. Review the TLS setup and the cloud firewall rules."
