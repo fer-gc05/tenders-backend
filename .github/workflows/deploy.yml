@@ -52,7 +52,7 @@ jobs:
           set -u
           host="$1"
           for attempt in 1 2 3 4 5; do
-            if curl -fsS -H "Host: ${host}" http://127.0.0.1/api/v1/status | grep -q '"status":"ok"'; then
+            if curl -fsS --max-time 15 --resolve "${host}:443:127.0.0.1" "https://${host}/api/v1/status" | grep -q '"status":"ok"'; then
               echo "The API responded correctly on the VPS"
               exit 0
             fi
