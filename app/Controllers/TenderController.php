@@ -12,6 +12,7 @@ use App\Http\Response;
 use App\Models\Tender;
 use App\Models\TenderDocument;
 use App\Views\TenderView;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Throwable;
 
@@ -19,13 +20,14 @@ use Throwable;
  * Controlador de las licitaciones.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.0.2
+ * @version   1.0.3
  * @since     2026-10-24
  * @updated   2026-10-25
  * @package   App\Controllers
  *
+ * @change    1.0.3 - 2026-10-25 - Fernando Luis Gil Correa - El buscador del listado filtra por consecutivo, objeto y descripción.
  * @change    1.0.2 - 2026-10-25 - Fernando Luis Gil Correa - Corrección del 404, del header Location, del guardado de documentos y de los filtros del listado.
- * @change    1.0.1 - 2026-10-25 - Fernando Luis Gil Correa - Corrección de síntaxis y re-throw en caso de excepción al crear.
+ * @change    1.0.1 - 2026-10-25 - Fernando Luis Gil Correa - Corrección de sintaxis y re-throw en caso de excepción al crear.
  */
 class TenderController extends Controller
 {
@@ -99,6 +101,21 @@ class TenderController extends Controller
 
     public function index(Request $request): Response
     {
+        $page = max(1, (int) ($request->query('page') ?: 1));
+        $perPage = min(50, max(1, (int) ($request->query('per_page') ?? 15)));
+        $paginator = $this->filtered($request)->orderByDesc('id')->paginate($perPage, ['*'], 'page', $page);
+
+        return Response::json(TenderView::paginated($paginator));
+    }
+
+    /**
+     * Aplica los filtros del listado a la consulta de licitaciones.
+     *
+     * El listado y el reporte Excel comparten estos filtros, de modo que el
+     * reporte muestra exactamente la misma informacion que la vista.
+     */
+    private function filtered(Request $request): Builder
+    {
         $query = Tender::query()->with('activity');
         $status = $request->query('status');
 
@@ -113,14 +130,20 @@ class TenderController extends Controller
 
         $search = $request->query('search');
         if (is_string($search) && $search !== '') {
-            $query->where('subject', 'like', '%' . $search . '%');
+            $like = '%' . $search . '%';
+
+            /*
+             * El buscador del listado filtra por consecutivo, objeto o
+             * descripcion, que son las columnas que muestra la vista.
+             */
+            $query->where(function ($builder) use ($like): void {
+                $builder->where('consecutive_code', 'like', $like)
+                    ->orWhere('subject', 'like', $like)
+                    ->orWhere('description', 'like', $like);
+            });
         }
 
-        $page = max(1, (int) ($request->query('page') ?: 1));
-        $perPage = min(50, max(1, (int) ($request->query('per_page') ?? 15)));
-        $paginator = $query->orderByDesc('id')->paginate($perPage, ['*'], 'page', $page);
-
-        return Response::json(TenderView::paginated($paginator));
+        return $query;
     }
 
     public function show(Request $request): Response
