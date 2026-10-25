@@ -9,13 +9,13 @@ use App\Models\TenderDocument;
 /**
  * Serializacion de documentos.
  * 
- * @author Fernando Luis Gil Correa
- * @version 1.0.0
- * @since 2026-10-24
- * @updated 2026-10-24
- * @package App\Views
- * 
- * @change 1.0.0 - 26-10-24 - Fernando Luis Gil Correa - Creacion de la clase.
+ * @author    Fernando Luis Gil Correa
+ * @version   1.0.1
+ * @since     2026-10-24
+ * @updated   2026-10-25
+ * @package   App\Views
+ *
+ * @change    1.0.1 - 2026-10-25 - Fernando Luis Gil Correa - Corrección de la ruta de descarga del documento.
  */
 class DocumentView
 {
@@ -29,9 +29,9 @@ class DocumentView
             'title' => $document->title,
             'extension' => pathinfo((string) $document->file_path, PATHINFO_EXTENSION),
             'size' => $route !== null && is_file($route) ? filesize($route) : null,
-            'download_url' => 'api/v1/tenders/' . $document->tender_id . '/documents/' . $document->id,
-            'created_at' => $document->created_at->toIso8601String(),
-            'updated_at' => $document->updated_at->toIso8601String()
+            'download_url' => '/api/v1/tenders/' . $document->tender_id . '/documents/' . $document->id,
+            'created_at' => $document->created_at?->toIso8601String(),
+            'updated_at' => $document->updated_at?->toIso8601String()
         ];
     }
 

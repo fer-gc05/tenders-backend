@@ -11,13 +11,13 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 /**
  * Serializacion de licitaciones.
  * 
- * @author Fernando Luis Gil Correa
- * @version 1.0.0
- * @since 2026-10-24
- * @updated 2026-10-24
- * @package App\Views
- * 
- * @change 1.0.0 - 26-10-24 - Fernando Luis Gil Correa - Creacion de la clase.
+ * @author    Fernando Luis Gil Correa
+ * @version   1.0.1
+ * @since     2026-10-24
+ * @updated   2026-10-25
+ * @package   App\Views
+ *
+ * @change    1.0.1 - 2026-10-25 - Fernando Luis Gil Correa - Corrección de la clave de la descripción y del tipo de la actividad.
  */
 class TenderView
 {
@@ -28,17 +28,17 @@ class TenderView
             'id' => $tender->id,
             'consecutive_code' => $tender->consecutive_code,
             'subject' => $tender->subject,
-            'descrription' => $tender->descrription,
+            'description' => $tender->description,
             'currency' => $tender->currency,
             'budget' => $tender->budget,
             'activity_id' => $tender->activity_id,
-            'start_date' => $tender->start_date->format('Y-m-d'),
-            'start_time' => $tender->start_time->format('H:i:s'),
-            'close_date' => $tender->close_date->format('Y-m-d'),
-            'close_time' => $tender->close_time->format('H:i:s'),
+            'start_date' => $tender->start_date?->format('Y-m-d'),
+            'start_time' => $tender->start_time?->format('H:i:s'),
+            'close_date' => $tender->close_date?->format('Y-m-d'),
+            'close_time' => $tender->close_time?->format('H:i:s'),
             'status' => $tender->status,
-            'created_at' => $tender->created_at->toIso8601String(),
-            'updated_at' => $tender->updated_at->toIso8601String()
+            'created_at' => $tender->created_at?->toIso8601String(),
+            'updated_at' => $tender->updated_at?->toIso8601String()
         ];
     }
 
@@ -65,7 +65,7 @@ class TenderView
         ];
     }
 
-    public static function detail(Tender $tender, Activity $activity, iterable $documents = []): array
+    public static function detail(Tender $tender, ?Activity $activity, iterable $documents = []): array
     {
         return self::make($tender) + [
             'activity' => $activity === null ? null : [

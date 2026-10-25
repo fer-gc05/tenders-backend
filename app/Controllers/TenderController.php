@@ -9,7 +9,6 @@ use App\Http\Request;
 use App\Http\Requests\Tenders\StoreTenderRequest;
 use App\Http\Requests\Tenders\UpdateTenderRequest;
 use App\Http\Response;
-use App\Models\Activity;
 use App\Models\Tender;
 use App\Models\TenderDocument;
 use App\Views\TenderView;
@@ -20,11 +19,12 @@ use Throwable;
  * Controlador de las licitaciones.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.0.1
+ * @version   1.0.2
  * @since     2026-10-24
  * @updated   2026-10-25
  * @package   App\Controllers
  *
+ * @change    1.0.2 - 2026-10-25 - Fernando Luis Gil Correa - Corrección del 404, del header Location, del guardado de documentos y de los filtros del listado.
  * @change    1.0.1 - 2026-10-25 - Fernando Luis Gil Correa - Corrección de síntaxis y re-throw en caso de excepción al crear.
  */
 class TenderController extends Controller
@@ -45,7 +45,7 @@ class TenderController extends Controller
         return Response::json(
             ['data' => TenderView::make($tender)],
             201,
-            ['location' => 'api/v1/tenders/' . $tender->id]
+            ['Location' => '/api/v1/tenders/' . $tender->id]
         );
     }
 
@@ -56,7 +56,7 @@ class TenderController extends Controller
         if ($tender === null) {
             return Response::json([
                 'error' => 'Tender not found.'
-            ]);
+            ], 404);
         }
 
         $data = $request->validated();
@@ -64,7 +64,7 @@ class TenderController extends Controller
 
         try {
             $tender = (new Tender())->getConnection()->transaction(
-                function () use ($request, $data, $tender, $files): Tender {
+                function () use ($request, $data, $tender, &$files): Tender {
                     $tender->update([
                         'subject' => $data['subject'],
                         'description' => $data['description'],
@@ -75,12 +75,12 @@ class TenderController extends Controller
                         'start_time' => $this->normalizeTime($data['start_time']),
                         'close_date' => $data['close_date'],
                         'close_time' => $this->normalizeTime($data['close_time']),
-                        'status' => $data['status'] ?? 'draft',
+                        'status' => $data['status'] ?? $tender->status,
 
                     ]);
 
-                    foreach ($request->uploads() as $files) {
-                        $documents = TenderDocument::storeUpload($files, $tender);
+                    foreach ($request->uploads() as $file) {
+                        $documents = TenderDocument::storeUpload($file, $tender);
                         $files[] = $documents->file_path;
                     }
 
@@ -113,16 +113,14 @@ class TenderController extends Controller
 
         $search = $request->query('search');
         if (is_string($search) && $search !== '') {
-            $query->where('search', 'like', '%' . $search . '%');
+            $query->where('subject', 'like', '%' . $search . '%');
         }
 
         $page = max(1, (int) ($request->query('page') ?: 1));
         $perPage = min(50, max(1, (int) ($request->query('per_page') ?? 15)));
         $paginator = $query->orderByDesc('id')->paginate($perPage, ['*'], 'page', $page);
 
-        return Response::json([
-            TenderView::paginated($paginator)
-        ]);
+        return Response::json(TenderView::paginated($paginator));
     }
 
     public function show(Request $request): Response

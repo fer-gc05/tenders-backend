@@ -13,12 +13,12 @@ use App\Models\TenderDocument;
  * Controlador de los documentos de una licitación.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.0.0
+ * @version   1.0.1
  * @since     2026-10-25
  * @updated   2026-10-25
  * @package   App\Controllers
  *
- * @change    1.0.0 - 2026-10-25 - Fernando Luis Gil Correa - Creación de la clase.
+ * @change    1.0.1 - 2026-10-25 - Fernando Luis Gil Correa - Validación de la existencia del archivo antes de enviarlo.
  */
 class DocumentController extends Controller
 {
@@ -35,8 +35,14 @@ class DocumentController extends Controller
 
         $route = TenderDocument::absolutePath((string) $document->file_path);
 
+        if ($route === null || !is_file($route)) {
+            return Response::json([
+                'error' => 'The document file is missing.'
+            ], 404);
+        }
+
         $name = (string) $document->title;
-        $mime = TenderDocument::detectdMime($route) ?: 'application/octet-stream';
+        $mime = TenderDocument::detectMime($route) ?: 'application/octet-stream';
         $ascii = preg_replace('/[^A-Za-z0-9._-]/', '_', $name) ?: 'document';
 
         header('Content-Type: ' . $mime);
