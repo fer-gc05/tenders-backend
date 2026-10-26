@@ -12,11 +12,12 @@ use App\Models\TenderDocument;
  * Reglas comunes de las licitaciones.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.0.2
+ * @version   1.0.3
  * @since     2026-10-24
- * @updated   2026-10-25
+ * @updated   2026-10-26
  * @package   App\Http\Requests
  *
+ * @change    1.0.3 - 2026-10-26 - Fernando Luis Gil Correa - El presupuesto admite como máximo 2 decimales.
  * @change    1.0.2 - 2026-10-25 - Fernando Luis Gil Correa - El presupuesto debe ser mayor a cero y los textos no pueden contener solo espacios.
  * @change    1.0.1 - 2026-10-25 - Fernando Luis Gil Correa - Corrección de la normalización de archivos y de las validaciones de negocio.
  */
@@ -88,6 +89,18 @@ abstract class TenderRequest extends FormRequest
             }
         }
 
+        /*
+         * El presupuesto se guarda en una columna decimal(15,2), así que
+         * admite como máximo dos decimales. La regla numeric acepta
+         * cualquier cantidad de decimales, de modo que el control del formato
+         * va aquí.
+         */
+        $budget = $this->budgetValue();
+
+        if ($budget !== null && preg_match('/^\d+(\.\d{3,})$/', $budget) === 1) {
+            $errors['budget'] = ['The budget may only have up to 2 decimal places.'];
+        }
+
         if (!Activity::find($this->body('activity_id'))) {
             $errors['activity_id'] = ['The selected activity is invalid.'];
         }
@@ -111,6 +124,22 @@ abstract class TenderRequest extends FormRequest
         }
 
         return $errors;
+    }
+
+    # Retorna el presupuesto como cadena, o null si no es un valor numérico.
+    private function budgetValue(): ?string
+    {
+        $budget = $this->body('budget');
+
+        if (is_string($budget)) {
+            return trim($budget);
+        }
+
+        if (is_int($budget) || is_float($budget)) {
+            return (string) $budget;
+        }
+
+        return null;
     }
 
     protected function closureIsAfterStart(): bool

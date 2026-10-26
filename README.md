@@ -376,6 +376,16 @@ foreach (['subject', 'description'] as $field) {
 }
 ```
 
+El presupuesto se guarda en una columna `decimal(15,2)`, así que admite como máximo dos decimales. La regla `numeric` acepta cualquier cantidad de decimales, de modo que ese control también se hace en el hook `after()`:
+
+```php
+$budget = $this->body('budget');
+
+if (is_string($budget) && preg_match('/^\d+(\.\d{3,})$/', $budget)) {
+    $errors['budget'] = ['The budget may only have up to 2 decimal places.'];
+}
+```
+
 ## Variables de entorno
 
 | Variable | Descripción | Valor por defecto |
