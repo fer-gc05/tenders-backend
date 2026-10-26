@@ -148,7 +148,9 @@ curl -OJ "http://localhost:8000/api/v1/tenders/export?status=published"
 
 ### Código consecutivo
 
-El código consecutivo lo genera el servidor con el formato `PO-XXXX-AA`: cuatro dígitos con el consecutivo del año y los dos últimos del año (`PO-0001-26`). El consecutivo se reinicia cada año y se deriva del máximo ya registrado en `tenders.consecutive_code`, así que no hace falta una tabla de secuencias ni se altera el esquema de la base de datos. Si dos peticiones simultáneas obtienen el mismo código, la que pierda la carrera reintenta con el siguiente valor.
+El código consecutivo lo genera el servidor con el formato `O-XXXX-AA`: cuatro dígitos con el consecutivo del año y los dos últimos del año (`O-0001-26`). El consecutivo se reinicia cada año y se deriva del máximo ya registrado en `tenders.consecutive_code`, así que no hace falta una tabla de secuencias ni se altera el esquema de la base de datos. Si dos peticiones simultáneas obtienen el mismo código, la que pierda la carrera reintenta con el siguiente valor.
+
+Los códigos con el prefijo anterior (`PO-`) no se migran: el contador solo mira los registros `O-` del año en curso, de modo que el primer código `O-` de cada año arranca en `0001`.
 
 ### Documentos
 

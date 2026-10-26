@@ -13,11 +13,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * Modelo de la tabla tenders(licitaciones-ofertas).
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.0.2
+ * @version   1.0.3
  * @since     2026-10-24
- * @updated   2026-10-25
+ * @updated   2026-10-26
  * @package   App\Models
  *
+ * @change    1.0.3 - 2026-10-26 - Fernando Luis Gil Correa - El consecutivo usa el prefijo O- en lugar de PO-.
  * @change    1.0.2 - 2026-10-25 - Fernando Luis Gil Correa - Corrección del cast de las horas y del generador de consecutivos.
  * @change    1.0.1 - 2026-10-24 - Fernando Luis Gil Correa - Creacion metodo generador de consecutivos.
  */
@@ -69,17 +70,21 @@ class Tender extends Model
      *
      * El número se deriva de los consecutivos ya guardados del año en curso,
      * por eso el contador reinicia solo cada 1 de enero. El formato es
-     * PO-{3 ceros a la izquierda}{consecutivo}-{año en 2 dígitos}.
+     * O-{3 ceros a la izquierda}{consecutivo}-{año en 2 dígitos}.
+     *
+     * Los consecutivos históricos con el prefijo PO- no se migran: el
+     * contador solo mira los registros O- del año en curso, de modo que el
+     * primer código O- de cada año arranca en 0001.
      */
     public static function nextConsecutiveCode(): string
     {
         $year = substr((string) date('Y'), -2);
 
         $last = (int) static::query()
-            ->where('consecutive_code', 'like', "PO-%-{$year}")
-            ->selectRaw('MAX(CAST(SUBSTRING(consecutive_code, 4, 4) AS UNSIGNED)) AS last')
+            ->where('consecutive_code', 'like', "O-%-{$year}")
+            ->selectRaw('MAX(CAST(SUBSTRING(consecutive_code, 3, 4) AS UNSIGNED)) AS last')
             ->value('last');
 
-        return sprintf('PO-%04d-%s', $last + 1, $year);
+        return sprintf('O-%04d-%s', $last + 1, $year);
     }
 }
