@@ -42,6 +42,7 @@ create table tender_documents (
     id int auto_increment primary key,
     tender_id int not null, -- llave foranea hacia la tabla licitaciones
     title varchar(100) not null,
+    description varchar(200) not null, -- descripcion del documento asociada a la licitacion
     file_path varchar(255) not null, -- ruta del archivo en el servidor
     created_at datetime default current_timestamp, -- Fecha de creacion(se asigna automaticamente al momento de la insercion)
     updated_at datetime default current_timestamp on update current_timestamp, -- Fecha de actualizacion(se asigna automaticamente al momento de la insercion y se actualiza al momento de la modificacion)

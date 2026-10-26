@@ -21,11 +21,12 @@ use Throwable;
  * Controlador de las licitaciones.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.0.4
+ * @version   1.0.5
  * @since     2026-10-24
- * @updated   2026-10-25
+ * @updated   2026-10-26
  * @package   App\Controllers
  *
+ * @change    1.0.5 - 2026-10-26 - Fernando Luis Gil Correa - Los documentos se guardan con el título y la descripción que envía el cliente.
  * @change    1.0.4 - 2026-10-25 - Fernando Luis Gil Correa - Descarga del reporte Excel del listado de licitaciones.
  * @change    1.0.3 - 2026-10-25 - Fernando Luis Gil Correa - El buscador del listado filtra por consecutivo, objeto y descripción.
  * @change    1.0.2 - 2026-10-25 - Fernando Luis Gil Correa - Corrección del 404, del header Location, del guardado de documentos y de los filtros del listado.
@@ -84,8 +85,12 @@ class TenderController extends Controller
                     ]);
 
                     foreach ($request->uploads() as $file) {
-                        $documents = TenderDocument::storeUpload($file, $tender);
-                        $files[] = $documents->file_path;
+                        $document = TenderDocument::storeUpload(
+                            $file,
+                            $tender,
+                            $request->documentMetadata((int) $file['index'])
+                        );
+                        $files[] = $document->file_path;
                     }
 
                     return $tender->fresh(['activity', 'documents']);
@@ -210,8 +215,12 @@ class TenderController extends Controller
                         ]);
 
                         foreach ($request->uploads() as $file) {
-                            $file = TenderDocument::storeUpload($file, $tender);
-                            $files[] = $file->file_path;
+                            $document = TenderDocument::storeUpload(
+                                $file,
+                                $tender,
+                                $request->documentMetadata((int) $file['index'])
+                            );
+                            $files[] = $document->file_path;
                         }
 
                         return $tender;

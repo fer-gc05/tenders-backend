@@ -12,11 +12,12 @@ use App\Models\TenderDocument;
  * Reglas comunes de las licitaciones.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.0.3
+ * @version   1.1.0
  * @since     2026-10-24
  * @updated   2026-10-26
  * @package   App\Http\Requests
  *
+ * @change    1.1.0 - 2026-10-26 - Fernando Luis Gil Correa - Los metadatos de los documentos (título, descripción, fecha y datos extra) se cruzan con los archivos por su índice.
  * @change    1.0.3 - 2026-10-26 - Fernando Luis Gil Correa - El presupuesto admite como máximo 2 decimales.
  * @change    1.0.2 - 2026-10-25 - Fernando Luis Gil Correa - El presupuesto debe ser mayor a cero y los textos no pueden contener solo espacios.
  * @change    1.0.1 - 2026-10-25 - Fernando Luis Gil Correa - Corrección de la normalización de archivos y de las validaciones de negocio.
@@ -44,7 +45,9 @@ abstract class TenderRequest extends FormRequest
      *
      * El campo de la petición se llama "documents". PHP entrega los archivos
      * múltiples como arreglos paralelos, así que se reorganizan en una lista
-     * de archivos con la misma estructura.
+     * de archivos con la misma estructura. Cada archivo conserva su "index",
+     * que es su posición en los arreglos paralelos, para poder cruzarlo con
+     * los metadatos que envía el cliente.
      */
     public function uploads(): array
     {
@@ -55,13 +58,14 @@ abstract class TenderRequest extends FormRequest
         }
 
         if (!is_array($files['name'])) {
-            return [$files];
+            return [array_merge($files, ['index' => 0])];
         }
 
         $list = [];
 
         foreach (array_keys($files['name']) as $index) {
             $list[] = [
+                'index' => $index,
                 'name' => $files['name'][$index],
                 'tmp_name' => $files['tmp_name'][$index],
                 'error' => $files['error'][$index],
@@ -70,6 +74,45 @@ abstract class TenderRequest extends FormRequest
         }
 
         return $list;
+    }
+
+    /**
+     * Retorna los metadatos del documento que está en la posición indicada.
+     *
+     * El cliente envía los metadatos en arreglos paralelos a los archivos:
+     * document_titles[], document_descriptions[], document_dates[] y
+     * document_extras[]. Cada índice corresponde al mismo archivo, así que el
+     * metadato del archivo en la posición $index es el de ese mismo índice.
+     *
+     * Los metadatos que no llegan se devuelven como null, para que el modelo
+     * pueda aplicar su valor por defecto.
+     */
+    public function documentMetadata(int $index): array
+    {
+        return [
+            'title' => $this->metadataValue('document_titles', $index),
+            'description' => $this->metadataValue('document_descriptions', $index),
+            'date' => $this->metadataValue('document_dates', $index),
+            'extra' => $this->metadataValue('document_extras', $index),
+        ];
+    }
+
+    # Lee un valor de los arreglos de metadatos de los documentos.
+    private function metadataValue(string $field, int $index): ?string
+    {
+        $values = $this->body($field);
+
+        if (!is_array($values)) {
+            $values = $_POST[$field] ?? null;
+        }
+
+        if (!is_array($values) || !isset($values[$index])) {
+            return null;
+        }
+
+        $value = $values[$index];
+
+        return is_string($value) ? $value : null;
     }
 
     protected function after(): array

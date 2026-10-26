@@ -51,7 +51,7 @@ mariadb -u root -p < docs/db/schema.sql
 | --- | --- |
 | `activities` | Catálogo de productos y servicios que se pueden licitar, clasificados por segmento, familia y clase. |
 | `tenders` | Licitaciones: código consecutivo, objeto, presupuesto, moneda, fechas de apertura y cierre, estado y actividad asociada. |
-| `tender_documents` | Documentos adjuntos a cada licitación (título y ruta del archivo en el servidor). |
+| `tender_documents` | Documentos adjuntos a cada licitación (título, descripción y ruta del archivo en el servidor). |
 
 ### Relaciones
 
@@ -167,8 +167,12 @@ curl -X POST http://localhost:8000/api/v1/tenders \
   -F "start_time=09:00" \
   -F "close_date=2026-12-01" \
   -F "close_time=17:00" \
-  -F "documents[]=@pliego.pdf;type=application/pdf"
+  -F "documents[]=@pliego.pdf;type=application/pdf" \
+  -F "document_titles[]=Pliego de condiciones" \
+  -F "document_descriptions[]=Documento de condiciones técnicas"
 ```
+
+Los metadatos de cada documento viajan en arreglos paralelos a los archivos, y cada índice corresponde al archivo del mismo índice: `document_titles[]` (título), `document_descriptions[]` (descripción), `document_dates[]` (fecha opcional) y `document_extras[]` (datos extra opcionales). El título y la descripción se ajustan a la longitud de sus columnas (`varchar(100)` y `varchar(200)`); cuando no llegan, el título toma el nombre del archivo y la descripción queda vacía.
 
 Solo se aceptan PDF y ZIP de hasta 10 MB, y el tipo se comprueba sobre el contenido real del archivo, nunca sobre el que declara el cliente. Al editar, la licitación debe conservar al menos un documento: los que ya tiene más los nuevos que se suben. Los archivos se guardan en `storage/uploads/` con un nombre aleatorio y solo se sirven a través del endpoint de descarga.
 

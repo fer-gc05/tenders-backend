@@ -11,11 +11,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Modelo de la tabla tender_documents(documentos de licitaciones-ofertas).
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.0.2
+ * @version   1.1.0
  * @since     2026-10-24
- * @updated   2026-10-25
+ * @updated   2026-10-26
  * @package   App\Models
  *
+ * @change    1.1.0 - 2026-10-26 - Fernando Luis Gil Correa - Los documentos guardan la descripción y el título que envía el cliente.
  * @change    1.0.2 - 2026-10-25 - Fernando Luis Gil Correa - Corrección del límite de tamaño, de la clave del archivo temporal y de los metodos de ruta y eliminacion.
  * @change    1.0.1 - 2026-10-24 - Fernando Luis Gil Correa - Implementacion de metodos auxiliares para menejo de archivos.
  */
@@ -23,6 +24,12 @@ class TenderDocument extends Model
 {
     # Tamaño maximo permitido(10MB)
     public const MAX_SIZE_BYTES = 10485760;
+
+    # Longitud maxima del titulo(100 caracteres)
+    public const MAX_TITLE_LENGTH = 100;
+
+    # Longitud maxima de la descripcion(200 caracteres)
+    public const MAX_DESCRIPTION_LENGTH = 200;
 
     # Tipos aceptados
     protected const ALLOWED_MIMES = [
@@ -36,6 +43,7 @@ class TenderDocument extends Model
     protected $fillable = [
         'tender_id',
         'title',
+        'description',
         'file_path'
     ];
 
@@ -128,10 +136,15 @@ class TenderDocument extends Model
      * Almacena un archivo subido en el servidor.
      *
      * El nombre que envia el cliente nunca se usa en el sistema de archivos,
-     * solo se conserva como titulo del documento. El archivo se guarda con un
-     * nombre aleatorio y con la extension del tipo real detectado.
+     * solo se conserva como titulo del documento cuando el cliente no envia
+     * un titulo propio. El archivo se guarda con un nombre aleatorio y con la
+     * extension del tipo real detectado.
+     *
+     * Los metadatos del documento (titulo y descripcion) llegan en la
+     * posicion que ocupa el archivo entre los archivos subidos, y se ajustan
+     * a la longitud de sus columnas.
      */
-    public static function storeUpload(array $file, Tender $tender): self
+    public static function storeUpload(array $file, Tender $tender, array $metadata = []): self
     {
         $extension = self::extensionFor(self::detectMime((string) $file['tmp_name']));
         $folder = 'uploads/' . date('Y/m');
@@ -158,9 +171,34 @@ class TenderDocument extends Model
 
         return static::create([
             'tender_id' => $tender->id,
-            'title' => mb_substr((string) $file['name'], 0, 100),
+            'title' => self::title($metadata, (string) $file['name']),
+            'description' => self::description($metadata),
             'file_path' => $folder . '/' . $name
         ]);
+    }
+
+    # Retorna el titulo del documento, con el del cliente o el nombre del archivo.
+    private static function title(array $metadata, string $fileName): string
+    {
+        $title = $metadata['title'] ?? null;
+
+        if (!is_string($title) || trim($title) === '') {
+            $title = $fileName;
+        }
+
+        return mb_substr(trim($title), 0, self::MAX_TITLE_LENGTH);
+    }
+
+    # Retorna la descripcion del documento, ajustada a la longitud de la columna.
+    private static function description(array $metadata): string
+    {
+        $description = $metadata['description'] ?? '';
+
+        if (!is_string($description)) {
+            return '';
+        }
+
+        return mb_substr(trim($description), 0, self::MAX_DESCRIPTION_LENGTH);
     }
 
     /**

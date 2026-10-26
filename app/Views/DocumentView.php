@@ -10,11 +10,12 @@ use App\Models\TenderDocument;
  * Serializacion de documentos.
  * 
  * @author    Fernando Luis Gil Correa
- * @version   1.0.1
+ * @version   1.0.2
  * @since     2026-10-24
- * @updated   2026-10-25
+ * @updated   2026-10-26
  * @package   App\Views
  *
+ * @change    1.0.2 - 2026-10-26 - Fernando Luis Gil Correa - La descripción del documento se incluye en la serialización.
  * @change    1.0.1 - 2026-10-25 - Fernando Luis Gil Correa - Corrección de la ruta de descarga del documento.
  */
 class DocumentView
@@ -27,6 +28,7 @@ class DocumentView
             'id' => $document->id,
             'tender_id' => $document->tender_id,
             'title' => $document->title,
+            'description' => $document->description,
             'extension' => pathinfo((string) $document->file_path, PATHINFO_EXTENSION),
             'size' => $route !== null && is_file($route) ? filesize($route) : null,
             'download_url' => '/api/v1/tenders/' . $document->tender_id . '/documents/' . $document->id,
