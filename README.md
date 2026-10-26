@@ -92,6 +92,7 @@ curl http://localhost:8000/api/v1/status
 | `POST` | `/api/v1/tenders/{id}` | Actualiza una licitación; acepta `multipart/form-data` para añadir documentos. | `200` con la licitación actualizada |
 | `PUT` | `/api/v1/tenders/{id}` | Actualiza una licitación con JSON (no admite archivos). | `200` con la licitación actualizada |
 | `GET` | `/api/v1/tenders/{id}/documents/{documentId}` | Descarga el archivo de un documento. | `200` con el binario y `Content-Disposition` |
+| `DELETE` | `/api/v1/tenders/{id}/documents/{documentId}` | Elimina un documento de la licitación; responde `409` si la licitación se quedaría sin documentos. | `204` |
 
 Las rutas inexistentes responden `404` y las peticiones con un método no permitido responden `405`, siempre en JSON. El `405` incluye el header `Allow` con los métodos registrados para la ruta (por ejemplo, `Allow: GET`), como exige el estándar HTTP.
 
@@ -173,6 +174,8 @@ curl -X POST http://localhost:8000/api/v1/tenders \
 ```
 
 Los metadatos de cada documento viajan en arreglos paralelos a los archivos, y cada índice corresponde al archivo del mismo índice: `document_titles[]` (título), `document_descriptions[]` (descripción), `document_dates[]` (fecha opcional) y `document_extras[]` (datos extra opcionales). El título y la descripción se ajustan a la longitud de sus columnas (`varchar(100)` y `varchar(200)`); cuando no llegan, el título toma el nombre del archivo y la descripción queda vacía.
+
+Un documento se elimina con `DELETE /api/v1/tenders/{id}/documents/{documentId}`. La respuesta es `204` y el archivo se borra del servidor; si la licitación se quedaría sin ningún documento, la API responde `409` y no elimina nada.
 
 Solo se aceptan PDF y ZIP de hasta 10 MB, y el tipo se comprueba sobre el contenido real del archivo, nunca sobre el que declara el cliente. Al editar, la licitación debe conservar al menos un documento: los que ya tiene más los nuevos que se suben. Los archivos se guardan en `storage/uploads/` con un nombre aleatorio y solo se sirven a través del endpoint de descarga.
 
