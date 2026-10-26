@@ -12,11 +12,14 @@ use Throwable;
  * Manejador global de errores y excepciones.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.1.0
+ * @version   1.1.1
  * @since     2026-10-22
- * @updated   2026-10-24
+ * @updated   2026-10-26
  * @package   App\Support
  *
+ * @change    1.1.1 - 2026-10-26 - Fernando Luis Gil Correa - La excepción se
+ *            convierte a cadena antes de registrarla, porque error_log solo
+ *            admite strings y con tipos estrictos no coerciona el objeto.
  * @change    1.1.0 - 2026-10-24 - Fernando Luis Gil Correa - Los avisos y
  *            deprecaciones se registran en el log en lugar de tumbar la
  *            petición, y los errores de producción quedan también en el log.
@@ -71,7 +74,9 @@ class ErrorHandler
         # Cualquier otra excepción se registra en el log con su traza. Bajo
         # php-fpm, error_log escribe en el registro del servicio
         # (journalctl -u php-fpm), sin archivos ni configuración adicionales.
-        error_log($e);
+        # La excepción se convierte a cadena porque error_log solo admite
+        # strings y, con tipos estrictos, no coerciona el objeto.
+        error_log((string) $e);
 
         $local = ($_ENV['APP_ENV'] ?? 'production') === 'local';
 
