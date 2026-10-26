@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Http\Controller;
+use App\Http\Cors;
 use App\Http\Request;
 use App\Http\Response;
 use App\Models\Tender;
@@ -14,11 +15,12 @@ use App\Models\TenderDocument;
  * Controlador de los documentos de una licitación.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.1.0
+ * @version   1.2.0
  * @since     2026-10-25
  * @updated   2026-10-26
  * @package   App\Controllers
  *
+ * @change    1.2.0 - 2026-10-26 - Fernando Luis Gil Correa - Headers CORS en la descarga del archivo del documento.
  * @change    1.1.0 - 2026-10-26 - Fernando Luis Gil Correa - Eliminación de un documento, con la condición de conservar al menos uno por licitación.
  * @change    1.0.1 - 2026-10-25 - Fernando Luis Gil Correa - Validación de la existencia del archivo antes de enviarlo.
  */
@@ -46,6 +48,10 @@ class DocumentController extends Controller
         $name = (string) $document->title;
         $mime = TenderDocument::detectMime($route) ?: 'application/octet-stream';
         $ascii = preg_replace('/[^A-Za-z0-9._-]/', '_', $name) ?: 'document';
+
+        # La respuesta binary no pasa por Response, así que los headers CORS
+        # se emiten aqui.
+        Cors::apply();
 
         header('Content-Type: ' . $mime);
         header('Content-Length: ' . (string) filesize($route));

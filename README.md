@@ -175,9 +175,9 @@ curl -X POST http://localhost:8000/api/v1/tenders \
 
 Los metadatos de cada documento viajan en arreglos paralelos a los archivos, y cada índice corresponde al archivo del mismo índice: `document_titles[]` (título), `document_descriptions[]` (descripción), `document_dates[]` (fecha opcional) y `document_extras[]` (datos extra opcionales). El título y la descripción se ajustan a la longitud de sus columnas (`varchar(100)` y `varchar(200)`); cuando no llegan, el título toma el nombre del archivo y la descripción queda vacía.
 
-Un documento se elimina con `DELETE /api/v1/tenders/{id}/documents/{documentId}`. La respuesta es `204` y el archivo se borra del servidor; si la licitación se quedaría sin ningún documento, la API responde `409` y no elimina nada.
-
 Solo se aceptan PDF y ZIP de hasta 10 MB, y el tipo se comprueba sobre el contenido real del archivo, nunca sobre el que declara el cliente. Al editar, la licitación debe conservar al menos un documento: los que ya tiene más los nuevos que se suben. Los archivos se guardan en `storage/uploads/` con un nombre aleatorio y solo se sirven a través del endpoint de descarga.
+
+Un documento se elimina con `DELETE /api/v1/tenders/{id}/documents/{documentId}`. La respuesta es `204` y el archivo se borra del servidor; si la licitación se quedaría sin ningún documento, la API responde `409` y no elimina nada.
 
 Para que la aplicación acepte archivos de hasta 10 MB, el servidor debe permitirlo:
 
@@ -186,6 +186,36 @@ Para que la aplicación acepte archivos de hasta 10 MB, el servidor debe permiti
 | `upload_max_filesize` (php.ini) | `10M` |
 | `post_max_size` (php.ini) | `20M` |
 | `client_max_body_size` (nginx) | `20m` |
+
+### CORS
+
+La API se consume desde un frontend que puede estar en otro origen (el servidor de desarrollo de Vite en `localhost:5173` o el dominio de despliegue), así que todas las respuestas incluyen los headers CORS y las peticiones `OPTIONS` (preflight) se responden con `204`:
+
+| Header | Valor |
+| --- | --- |
+| `Access-Control-Allow-Origin` | El origen de la petición si está en la lista permitida, o `*` si no se configuró ninguna |
+| `Access-Control-Allow-Methods` | `GET, POST, PUT, PATCH, DELETE, OPTIONS` |
+| `Access-Control-Allow-Headers` | `Content-Type, Authorization, Accept` |
+| `Access-Control-Max-Age` | `86400` |
+| `Vary` | `Origin` (solo cuando la lista de orígenes es concreta) |
+
+Los origenes permitidos se configuran en `CORS_ALLOWED_ORIGIN`, que admite una lista separada por comas. Si la variable no está definida, se permite cualquier origen (`*`), que es el comportamiento del desarrollo local; en producción se deben fijar los dominios del frontend:
+
+```bash
+CORS_ALLOWED_ORIGIN=https://tenders-dev.duckdns.org,http://localhost:5173
+```
+
+Cuando la lista es concreta, la respuesta devuelve el origen de la petición solo si está en la lista: un origen no permitido recibe la respuesta sin el header `Access-Control-Allow-Origin`, y el navegador la bloquea.
+
+```bash
+curl -X OPTIONS http://localhost:8000/api/v1/tenders -v
+# HTTP/1.1 204 No Content
+# Access-Control-Allow-Origin: *
+# Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+# Access-Control-Allow-Headers: Content-Type, Authorization, Accept
+```
+
+Los headers los emite la aplicación, no el servidor web: si el proxy (nginx) también los añadiera, la respuesta traería dos valores de `Access-Control-Allow-Origin` y el navegador la rechazaría. El proxy debe reenviar la petición `OPTIONS` al front controller en lugar de responderla por su cuenta.
 
 ## Estructura
 
@@ -199,6 +229,7 @@ app/
 │   └── DocumentController.php Descarga de los documentos adjuntos
 ├── Http/
 │   ├── Controller.php        Controlador base
+│   ├── Cors.php             Headers CORS de la API
 │   ├── FormRequest.php       Solicitud con validación declarativa
 │   ├── Request.php           Solicitud HTTP
 │   ├── Response.php          Respuesta HTTP
@@ -400,6 +431,7 @@ if (is_string($budget) && preg_match('/^\d+(\.\d{3,})$/', $budget)) {
 | `APP_NAME` | Nombre de la aplicación | `tenders_backend` |
 | `APP_ENV` | Entorno de ejecución. En `local`, los errores 500 incluyen mensaje, archivo y traza | `local` |
 | `APP_TIMEZONE` | Zona horaria de PHP. Debe coincidir con la de la base de datos | `America/Bogota` |
+| `CORS_ALLOWED_ORIGIN` | Origen permitido por CORS. En producción, el dominio del frontend | `*` |
 | `DB_CONNECTION` | Driver de base de datos | `mariadb` |
 | `DB_HOST` | Host de la base de datos | `127.0.0.1` |
 | `DB_PORT` | Puerto de la base de datos | `3306` |

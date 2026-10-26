@@ -8,11 +8,13 @@ namespace App\Http;
  * Enrutador de la aplicación.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.1.0
+ * @version   1.2.0
  * @since     2026-10-22
- * @updated   2026-10-24
+ * @updated   2026-10-26
  * @package   App\Http
  *
+ * @change    1.2.0 - 2026-10-26 - Fernando Luis Gil Correa - Las peticiones
+ *            OPTIONS (preflight) se responden con 204 y los headers CORS.
  * @change    1.1.0 - 2026-10-24 - Fernando Luis Gil Correa - Header Allow
  *            en las respuestas 405, con los métodos registrados para la ruta.
  */
@@ -59,6 +61,16 @@ class Router
     public function dispatch(): void
     {
         $allowed = []; # Métodos registrados para la ruta solicitada.
+
+        /*
+         * Las peticiones OPTIONS son el preflight que el navegador envía antes
+         * de una petición cross-origin. Se responden con 204 y los headers
+         * CORS, sin ejecutar ninguna acción de la ruta.
+         */
+        if ($this->request->method() === 'OPTIONS') {
+            Response::noContent()->send();
+            return;
+        }
 
         foreach ($this->routes as [$method, $pattern, $action]) {
             $params = $this->match($pattern, $this->request->path());

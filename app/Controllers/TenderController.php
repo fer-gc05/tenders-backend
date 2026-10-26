@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Http\Controller;
+use App\Http\Cors;
 use App\Http\Request;
 use App\Http\Requests\Tenders\StoreTenderRequest;
 use App\Http\Requests\Tenders\UpdateTenderRequest;
@@ -21,11 +22,12 @@ use Throwable;
  * Controlador de las licitaciones.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.0.5
+ * @version   1.1.0
  * @since     2026-10-24
  * @updated   2026-10-26
  * @package   App\Controllers
  *
+ * @change    1.1.0 - 2026-10-26 - Fernando Luis Gil Correa - Headers CORS en la descarga del reporte Excel.
  * @change    1.0.5 - 2026-10-26 - Fernando Luis Gil Correa - Los documentos se guardan con el título y la descripción que envía el cliente.
  * @change    1.0.4 - 2026-10-25 - Fernando Luis Gil Correa - Descarga del reporte Excel del listado de licitaciones.
  * @change    1.0.3 - 2026-10-25 - Fernando Luis Gil Correa - El buscador del listado filtra por consecutivo, objeto y descripción.
@@ -126,6 +128,10 @@ class TenderController extends Controller
         $tenders = $this->filtered($request)->orderByDesc('id')->get();
         $binary = TendersXlsxView::build($tenders);
         $name = TendersXlsxView::filename();
+
+        # La respuesta binary no pasa por Response, así que los headers CORS
+        # se emiten aqui.
+        Cors::apply();
 
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Length: ' . (string) strlen($binary));

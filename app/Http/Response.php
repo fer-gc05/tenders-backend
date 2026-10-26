@@ -8,11 +8,13 @@ namespace App\Http;
  * Respuesta HTTP.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.1.0
+ * @version   1.2.0
  * @since     2026-10-22
- * @updated   2026-10-24
+ * @updated   2026-10-26
  * @package   App\Http
  *
+ * @change    1.2.0 - 2026-10-26 - Fernando Luis Gil Correa - Headers CORS en
+ *            todas las respuestas y respuesta 204 sin cuerpo.
  * @change    1.1.0 - 2026-10-24 - Fernando Luis Gil Correa - Headers
  *            personalizados en las respuestas JSON y codificación que falla
  *            de forma explícita con datos no serializables.
@@ -38,10 +40,30 @@ class Response
         return new self($data, $status, $headers);
     }
 
+    # Crea una respuesta sin contenido (204).
+    #
+    # El estándar HTTP exige que la respuesta 204 no tenga cuerpo, así que
+    # no se envía ni el tipo de contenido ni los datos.
+    public static function noContent(): self
+    {
+        return new self(null, 204);
+    }
+
     # Envia la respuesta al cliente.
     public function send(): void
     {
         http_response_code($this->status);
+
+        # Los headers CORS acompañan a todas las respuestas, no solo al
+        # preflight: el navegador los necesita también en la respuesta real.
+        foreach (Cors::headers() as $name => $value) {
+            header($name . ': ' . $value);
+        }
+
+        if ($this->status === 204) {
+            return;
+        }
+
         header('Content-Type: application/json; charset=utf-8');
 
         foreach ($this->headers as $name => $value) {
