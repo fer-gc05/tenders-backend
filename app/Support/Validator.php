@@ -8,11 +8,15 @@ namespace App\Support;
  * Validador de datos con reglas declarativas.
  *
  * @author    Fernando Luis Gil Correa
- * @version   1.1.0
+ * @version   1.2.0
  * @since     2026-10-24
- * @updated   2026-10-24
+ * @updated   2026-10-25
  * @package   App\Support
  *
+ * @change    1.2.0 - 2026-10-25 - Fernando Luis Gil Correa - min/max
+ *            interpretan el valor según el tipo declarado en las reglas del
+ *            campo, de modo que un código numérico como "10101501" se valida
+ *            como texto de 8 caracteres y no como el entero 10.101.501.
  * @change    1.1.0 - 2026-10-24 - Fernando Luis Gil Correa - Semántica
  *            numérica en min/max, fecha ISO estricta, nueva regla time y
  *            rechazo de booleanos en integer.
@@ -80,8 +84,8 @@ class Validator
             'date' => $this->isIsoDate($value),
             'time' => $this->isTime($value),
             'in' => in_array((string) $value, explode(',', (string) $param), true),
-            'min' => $this->checkMin($value, (float) $param),
-            'max' => $this->checkMax($value, (float) $param),
+            'min' => $this->checkMin($field, $value, (float) $param),
+            'max' => $this->checkMax($field, $value, (float) $param),
             default => true,
         };
 
@@ -94,18 +98,22 @@ class Validator
 
     # Verifica el mínimo de un valor.
     #
-    # La regla `min` (y `max`) interpreta el valor según su tipo:
-    # un array se compara por cantidad de elementos, un valor numérico
-    # (incluida una cadena numérica como "15000000.00") se compara por su
-    # valor y cualquier otra cadena se compara por su longitud. Esto permite
-    # acotar tanto el tamaño de un texto como el valor de un presupuesto.
-    private function checkMin(mixed $value, float $min): bool
+    # La regla `min` (y `max`) interpreta el valor según el tipo declarado en
+    # las reglas del campo: un campo `numeric` o `integer` se compara por su
+    # valor, un campo `array` por la cantidad de elementos y cualquier otro
+    # (por ejemplo `string`) por la longitud del texto. Así, un código
+    # numérico como "10101501" se valida como texto de 8 caracteres y no como
+    # el entero 10.101.501, mientras que un presupuesto enviado como
+    # "15000000.00" sigue acotado por su valor.
+    private function checkMin(string $field, mixed $value, float $min): bool
     {
-        if (is_array($value)) {
-            return count($value) >= $min;
+        $mode = $this->sizeMode($field);
+
+        if ($mode === 'array') {
+            return is_array($value) ? count($value) >= $min : true;
         }
 
-        if (is_numeric($value)) {
+        if ($mode === 'numeric' && is_numeric($value)) {
             return (float) $value >= $min;
         }
 
@@ -113,17 +121,43 @@ class Validator
     }
 
     # Verifica el máximo de un valor (número, longitud o cantidad).
-    private function checkMax(mixed $value, float $max): bool
+    private function checkMax(string $field, mixed $value, float $max): bool
     {
-        if (is_array($value)) {
-            return count($value) <= $max;
+        $mode = $this->sizeMode($field);
+
+        if ($mode === 'array') {
+            return is_array($value) ? count($value) <= $max : true;
         }
 
-        if (is_numeric($value)) {
+        if ($mode === 'numeric' && is_numeric($value)) {
             return (float) $value <= $max;
         }
 
         return mb_strlen((string) $value) <= $max;
+    }
+
+    # Determina cómo se compara el tamaño de un campo.
+    #
+    # El tipo lo declaran las reglas del propio campo: `numeric` e `integer`
+    # comparan por valor, `array` por cantidad de elementos y el resto por la
+    # longitud del texto. El valor recibido no decide, porque un código como
+    # "10101501" es un texto aunque solo tenga dígitos.
+    private function sizeMode(string $field): string
+    {
+        $names = array_map(
+            static fn (string $rule): string => explode(':', $rule, 2)[0],
+            explode('|', $this->rules[$field] ?? '')
+        );
+
+        if (in_array('integer', $names, true) || in_array('numeric', $names, true)) {
+            return 'numeric';
+        }
+
+        if (in_array('array', $names, true)) {
+            return 'array';
+        }
+
+        return 'string';
     }
 
     # Comprueba una fecha en formato ISO `YYYY-MM-DD`.
